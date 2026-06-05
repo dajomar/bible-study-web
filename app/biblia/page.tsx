@@ -1,9 +1,10 @@
 "use client";
 
 import { useEffect, useRef, useState, useCallback, useMemo } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
 import apiClient from "@/lib/axios";
 import { useResaltados } from "@/hooks/useResaltados";
-import { FloatingHighlightMenu, COLORES_RESALTADO } from "@/components/ui/FloatingHighlightMenu";
+import { FloatingVerseMenu, COLORES_RESALTADO } from "@/components/ui/FloatingVerseMenu";
 
 interface Libro {
   id: number;
@@ -128,6 +129,9 @@ function getSugerencias(input: string, libros: Libro[], limit = 6): Libro[] {
 type Modo = "referencia" | "busqueda" | "comparar";
 
 export default function BibliaPage() {
+  const router = useRouter();
+  const searchParams = useSearchParams();
+
   // ── Estado del lector (compartido entre referencia y busqueda) ──
   const [libros, setLibros] = useState<Libro[]>([]);
   const [capitulos, setCapitulos] = useState<Capitulo[]>([]);
@@ -147,8 +151,13 @@ export default function BibliaPage() {
   const [copiado, setCopiado] = useState<number | null>(null);
   const [modo, setModo] = useState<Modo>("referencia");
   const { resaltados, cargar, guardar, quitar } = useResaltados();
-  const [menuState, setMenuState] = useState<{ versiculoId: number; rect: DOMRect } | null>(null);
-  const suppressCopyRef = useRef(false);
+  const [menuState, setMenuState] = useState<{
+    versiculoId: number;
+    rect: DOMRect;
+    copiar: () => void;
+    compartir: () => void;
+    comparar: () => void;
+  } | null>(null);
 
   // ── Estado: modo referencia ──
   const [inputRef, setInputRef] = useState("");
@@ -173,6 +182,16 @@ export default function BibliaPage() {
   const sugerenciasRef = useMemo(() => getSugerencias(inputRef, libros), [inputRef, libros]);
   const sugerenciasLibro = useMemo(() => getSugerencias(inputLibro, libros, 8), [inputLibro, libros]);
   const sugerenciasComparar = useMemo(() => getSugerencias(refComparar, libros), [refComparar, libros]);
+
+  // ── Leer ?modo=comparar&ref=... al montar ──
+  useEffect(() => {
+    const modoParam = searchParams.get("modo");
+    const refParam = searchParams.get("ref");
+    if (modoParam === "comparar" && refParam) {
+      setModo("comparar");
+      setRefComparar(refParam);
+    }
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   // ── Cargar libros al montar ──
   useEffect(() => {
@@ -211,13 +230,26 @@ export default function BibliaPage() {
     return () => document.removeEventListener("mousedown", onMouseDown);
   }, [menuState]);
 
-  function onVerseMouseUp(versiculoId: number) {
+  async function compartirVersiculo(texto: string, ref: string) {
     const sel = window.getSelection();
-    if (!sel || sel.isCollapsed || !sel.rangeCount) return;
-    const rect = sel.getRangeAt(0).getBoundingClientRect();
-    if (!rect.width && !rect.height) return;
-    suppressCopyRef.current = true;
-    setMenuState({ versiculoId, rect });
+    const selText = sel && !sel.isCollapsed ? sel.toString().trim() : null;
+    const textoCopia = selText ? `"${selText}" — ${ref}` : `${texto} — ${ref}`;
+    if (typeof navigator !== "undefined" && navigator.share) {
+      try { await navigator.share({ text: textoCopia, title: ref }); return; } catch {}
+    }
+    try { await navigator.clipboard.writeText(textoCopia); } catch {}
+  }
+
+  function makeMenuState(v: Versiculo, rect: DOMRect) {
+    const libro = libros.find((l) => String(l.id) === libroId);
+    const verseRef = libro ? `${libro.nombre} ${capituloNum}:${v.numero}` : String(v.numero);
+    return {
+      versiculoId: v.id,
+      rect,
+      copiar: () => copiarVersiculo(v),
+      compartir: () => compartirVersiculo(v.texto, verseRef),
+      comparar: () => router.push(`/biblia?modo=comparar&ref=${encodeURIComponent(libro ? libro.nombre + " " + capituloNum : capituloNum)}`),
+    };
   }
 
   // ── Cargar versículos ──
@@ -719,10 +751,17 @@ export default function BibliaPage() {
                     <p
                       data-versiculo-id={v.id}
                       ref={(el) => { versiculoRefs.current[v.numero] = el; }}
-                      onMouseUp={() => onVerseMouseUp(v.id)}
-                      onClick={() => {
-                        if (suppressCopyRef.current) { suppressCopyRef.current = false; return; }
-                        copiarVersiculo(v);
+                      onMouseUp={() => {
+                        const sel = window.getSelection();
+                        if (!sel || sel.isCollapsed || !sel.rangeCount) return;
+                        const rect = sel.getRangeAt(0).getBoundingClientRect();
+                        if (!rect.width && !rect.height) return;
+                        setMenuState(makeMenuState(v, rect));
+                      }}
+                      onClick={(e) => {
+                        const sel = window.getSelection();
+                        if (sel && !sel.isCollapsed) return;
+                        setMenuState(makeMenuState(v, (e.currentTarget as HTMLElement).getBoundingClientRect()));
                       }}
                       title="Clic para copiar · selecciona texto para resaltar"
                       style={{
@@ -787,20 +826,15 @@ export default function BibliaPage() {
       )}
 
       {menuState && (
-        <FloatingHighlightMenu
+        <FloatingVerseMenu
           versiculoId={menuState.versiculoId}
           rect={menuState.rect}
           resaltadoActual={resaltados[menuState.versiculoId]}
-          onColor={(id, color) => {
-            guardar(id, color);
-            setMenuState(null);
-            window.getSelection()?.removeAllRanges();
-          }}
-          onQuitar={(id) => {
-            quitar(id);
-            setMenuState(null);
-            window.getSelection()?.removeAllRanges();
-          }}
+          onColor={(id, color) => { guardar(id, color); setMenuState(null); window.getSelection()?.removeAllRanges(); }}
+          onQuitar={(id) => { quitar(id); setMenuState(null); window.getSelection()?.removeAllRanges(); }}
+          onCopiar={() => { menuState.copiar(); setMenuState(null); window.getSelection()?.removeAllRanges(); }}
+          onCompartir={() => { menuState.compartir(); setMenuState(null); window.getSelection()?.removeAllRanges(); }}
+          onComparar={() => { menuState.comparar(); setMenuState(null); }}
         />
       )}
     </main>

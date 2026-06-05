@@ -1,9 +1,10 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useState } from "react";
+import { useRouter } from "next/navigation";
 import apiClient from "@/lib/axios";
 import { useResaltados } from "@/hooks/useResaltados";
-import { FloatingHighlightMenu, COLORES_RESALTADO } from "@/components/ui/FloatingHighlightMenu";
+import { FloatingVerseMenu, COLORES_RESALTADO } from "@/components/ui/FloatingVerseMenu";
 
 interface CapituloInfo {
   numero: number;
@@ -70,6 +71,7 @@ function formatFecha(iso: string): string {
 }
 
 export default function AnalisisPage() {
+  const router = useRouter();
   const [lista, setLista] = useState<Analisis[]>([]);
   const [loading, setLoading] = useState(true);
   const [abierto, setAbierto] = useState<number | null>(null);
@@ -79,8 +81,13 @@ export default function AnalisisPage() {
   const [tamano, setTamano] = useState(1);
   const [copiado, setCopiad] = useState<number | null>(null);
   const { resaltados, cargar, guardar, quitar } = useResaltados();
-  const [menuState, setMenuState] = useState<{ versiculoId: number; rect: DOMRect } | null>(null);
-  const suppressCopyRef = useRef(false);
+  const [menuState, setMenuState] = useState<{
+    versiculoId: number;
+    rect: DOMRect;
+    copiar: () => void;
+    compartir: () => void;
+    comparar: () => void;
+  } | null>(null);
 
   // Cierra el menú con scroll o clic fuera
   useEffect(() => {
@@ -98,13 +105,14 @@ export default function AnalisisPage() {
     return () => document.removeEventListener("mousedown", onMouseDown);
   }, [menuState]);
 
-  function onVerseMouseUp(versiculoId: number) {
+  async function compartirVersiculo(texto: string, ref: string) {
     const sel = window.getSelection();
-    if (!sel || sel.isCollapsed || !sel.rangeCount) return;
-    const rect = sel.getRangeAt(0).getBoundingClientRect();
-    if (!rect.width && !rect.height) return;
-    suppressCopyRef.current = true;
-    setMenuState({ versiculoId, rect });
+    const selText = sel && !sel.isCollapsed ? sel.toString().trim() : null;
+    const textoCopia = selText ? `"${selText}" — ${ref}` : `${texto} — ${ref}`;
+    if (typeof navigator !== "undefined" && navigator.share) {
+      try { await navigator.share({ text: textoCopia, title: ref }); return; } catch {}
+    }
+    try { await navigator.clipboard.writeText(textoCopia); } catch {}
   }
 
   useEffect(() => {
@@ -283,13 +291,33 @@ export default function AnalisisPage() {
                                 )}
                                 <p
                                   data-versiculo-id={v.id}
-                                  onMouseUp={() => onVerseMouseUp(v.id)}
+                                  onMouseUp={() => {
+                                    const sel = window.getSelection();
+                                    if (!sel || sel.isCollapsed || !sel.rangeCount) return;
+                                    const rect = sel.getRangeAt(0).getBoundingClientRect();
+                                    if (!rect.width && !rect.height) return;
+                                    const libroNombre = a.sesion.inicio.capitulo.libro.nombre;
+                                    const verseRef = `${libroNombre} ${v.capitulo_numero}:${v.numero}`;
+                                    setMenuState({ versiculoId: v.id, rect,
+                                      copiar: () => copiarVersiculo(v, referencia),
+                                      compartir: () => compartirVersiculo(v.texto, verseRef),
+                                      comparar: () => router.push(`/biblia?modo=comparar&ref=${encodeURIComponent(libroNombre + " " + v.capitulo_numero)}`),
+                                    });
+                                  }}
                                   onClick={(e) => {
                                     e.stopPropagation();
-                                    if (suppressCopyRef.current) { suppressCopyRef.current = false; return; }
-                                    copiarVersiculo(v, referencia);
+                                    const sel = window.getSelection();
+                                    if (sel && !sel.isCollapsed) return;
+                                    const libroNombre = a.sesion.inicio.capitulo.libro.nombre;
+                                    const verseRef = `${libroNombre} ${v.capitulo_numero}:${v.numero}`;
+                                    const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
+                                    setMenuState({ versiculoId: v.id, rect,
+                                      copiar: () => copiarVersiculo(v, referencia),
+                                      compartir: () => compartirVersiculo(v.texto, verseRef),
+                                      comparar: () => router.push(`/biblia?modo=comparar&ref=${encodeURIComponent(libroNombre + " " + v.capitulo_numero)}`),
+                                    });
                                   }}
-                                  title="Clic para copiar · selecciona texto para resaltar"
+                                  title="Toca para opciones · arrastra para resaltar"
                                   style={{
                                     backgroundColor: copiado === v.id
                                       ? undefined
@@ -334,20 +362,15 @@ export default function AnalisisPage() {
       )}
 
       {menuState && (
-        <FloatingHighlightMenu
+        <FloatingVerseMenu
           versiculoId={menuState.versiculoId}
           rect={menuState.rect}
           resaltadoActual={resaltados[menuState.versiculoId]}
-          onColor={(id, color) => {
-            guardar(id, color);
-            setMenuState(null);
-            window.getSelection()?.removeAllRanges();
-          }}
-          onQuitar={(id) => {
-            quitar(id);
-            setMenuState(null);
-            window.getSelection()?.removeAllRanges();
-          }}
+          onColor={(id, color) => { guardar(id, color); setMenuState(null); window.getSelection()?.removeAllRanges(); }}
+          onQuitar={(id) => { quitar(id); setMenuState(null); window.getSelection()?.removeAllRanges(); }}
+          onCopiar={() => { menuState.copiar(); setMenuState(null); window.getSelection()?.removeAllRanges(); }}
+          onCompartir={() => { menuState.compartir(); setMenuState(null); window.getSelection()?.removeAllRanges(); }}
+          onComparar={() => { menuState.comparar(); setMenuState(null); }}
         />
       )}
     </main>

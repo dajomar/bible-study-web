@@ -10,6 +10,7 @@ const LINKS = [
   { href: "/estudio", label: "Estudio" },
   { href: "/biblia", label: "Biblia" },
   { href: "/analisis", label: "Análisis" },
+  { href: "/resaltados", label: "Resaltados" },
   { href: "/plan", label: "Plan" },
   { href: "/configuracion", label: "Config" },
 ];
