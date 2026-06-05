@@ -69,6 +69,7 @@ Texto principal:   #2C2C2C  (carbón suave)
 Acento:            #4A6FA5  (azul pizarra — sobrio)
 Texto secundario:  #8A8A8A  (gris cálido)
 Bordes:            #E8E4DF  (gris crema)
+Hover:             #F0EDE8  (crema oscuro)
 ```
 
 **Tipografía:**
@@ -81,6 +82,7 @@ Bordes:            #E8E4DF  (gris crema)
 - Sombras casi imperceptibles (shadow-sm)
 - Sin animaciones llamativas
 - Priorizar el texto sobre los elementos decorativos
+- `max-w-3xl` como ancho de contenido estándar en todas las páginas
 
 ---
 
@@ -90,20 +92,20 @@ Bordes:            #E8E4DF  (gris crema)
 bible-study-web/
 ├── app/
 │   ├── layout.tsx                       # Layout raíz con fuentes y nav
-│   ├── page.tsx                         # Dashboard / overview (ruta /)
+│   ├── page.tsx                         # Dashboard (ruta /)
 │   ├── login/
 │   │   └── page.tsx                     # Login / registro
 │   ├── estudio/
-│   │   └── page.tsx                     # Estudio del día (texto + análisis)
+│   │   └── page.tsx                     # Estudio del día
 │   ├── biblia/
-│   │   └── page.tsx                     # Lector de Biblia (buscar por libro)
+│   │   └── page.tsx                     # Lector de Biblia
 │   ├── analisis/
-│   │   └── page.tsx                     # Historial de análisis con texto bíblico inline
+│   │   └── page.tsx                     # Historial de análisis
 │   ├── plan/
-│   │   └── page.tsx                     # Gestión del plan de estudios
+│   │   └── page.tsx                     # Gestión del plan
 │   ├── configuracion/
-│   │   └── page.tsx                     # Perfil, cambio de contraseña, zona de peligro
-│   └── api/                             # Route Handlers — backend interno
+│   │   └── page.tsx                     # Perfil, contraseña, zona de peligro
+│   └── api/
 │       ├── auth/
 │       │   ├── login/route.ts           # POST — inicia sesión
 │       │   ├── registro/route.ts        # POST — crea usuario (admin.createUser, sin email)
@@ -111,22 +113,23 @@ bible-study-web/
 │       │   └── cambiar-password/route.ts# POST — verifica pass actual, actualiza con admin API
 │       ├── dashboard/route.ts           # GET — sesión del día, progreso, tareas pendientes
 │       ├── estudio/
-│       │   ├── route.ts                 # GET — sesión activa + versículos + análisis
+│       │   ├── route.ts                 # GET — sesión activa + versículos (con capitulo_numero) + análisis
 │       │   └── completar/route.ts       # POST — marca sesión completada con timestamp
 │       ├── biblia/
 │       │   ├── libros/route.ts          # GET — 66 libros ordenados por testamento
-│       │   └── route.ts                 # GET — capítulos (libro_id) o versículos (libro_id + capitulo)
+│       │   ├── route.ts                 # GET — capítulos (libro_id) o versículos (libro_id + capitulo)
+│       │   └── buscar/route.ts          # GET — búsqueda full-text con ilike, limit 30
 │       ├── analisis/route.ts            # GET — historial de análisis del usuario
 │       ├── plan/
-│       │   ├── route.ts                 # GET — todos los planes + sesiones del activo; POST — crear plan
+│       │   ├── route.ts                 # GET — planes + sesiones del activo; POST — crear plan
 │       │   └── [id]/route.ts            # PUT — activar/desactivar plan
 │       ├── sesion/
-│       │   └── [id]/versiculos/route.ts # GET — versículos de una sesión (mismo/distinto capítulo)
+│       │   └── [id]/versiculos/route.ts # GET — versículos de sesión (con capitulo_numero)
 │       └── usuario/route.ts             # GET — perfil + stats; PUT — nombre; DELETE — eliminar cuenta
 ├── components/
 │   └── ui/
 │       ├── Nav.tsx                      # Nav responsiva: hamburger móvil, horizontal desktop
-│       └── NavWrapper.tsx              # Oculta Nav en /login
+│       └── NavWrapper.tsx               # Oculta Nav en /login
 ├── lib/
 │   ├── supabase.ts                      # Cliente admin con service role — SERVER ONLY
 │   ├── supabase-auth.ts                 # Cliente SSR con cookies — SERVER ONLY
@@ -151,7 +154,7 @@ SUPABASE_SERVICE_ROLE_KEY=          # NUNCA en NEXT_PUBLIC_
 NEXT_PUBLIC_API_BASE_URL=http://localhost:3000
 ```
 
-**Producción (Vercel dashboard / CLI):**
+**Producción (Vercel):**
 ```
 SUPABASE_URL=                       # igual que local
 SUPABASE_SERVICE_ROLE_KEY=          # igual que local
@@ -192,41 +195,63 @@ bible_tareas      → id, id_sesion, id_analisis, id_usuario,
 
 ## Decisiones técnicas relevantes
 
-- **`auth.admin.createUser({ email_confirm: true })`** en registro — evita envío de email y rate limits de Supabase
-- **Middleware `PUBLIC_PATHS`** incluye tanto `"/login"` como `"/api/auth"` — sin esto las rutas de auth quedan bloqueadas
-- **Verso range en sesiones:** mismo capítulo → rango por `numero` (gte/lte); distinto capítulo → rango por `id` (gte/lte)
-- **Stats en `/api/usuario`:** Supabase JS no soporta subqueries en `.in()` — se hace en 3 queries secuenciales (plan IDs → sesion IDs → count analisis)
-- **Versículos en `/analisis`** se cargan de forma lazy al expandir cada card, cacheados en `versiculosMap` por `sesion.id`
-- **Nav responsiva:** hamburger animado en móvil, links horizontales en desktop; se oculta completamente en `/login` vía `NavWrapper`
+- **`auth.admin.createUser({ email_confirm: true })`** en registro — evita envío de email y rate limits
+- **Middleware `PUBLIC_PATHS`** incluye `"/login"` y `"/api/auth"` — sin esto las rutas de auth quedan bloqueadas
+- **Verso range en sesiones:** mismo capítulo → rango por `numero`; distinto capítulo → rango por `id`
+- **`capitulo_numero` en versículos:** `/api/estudio` y `/api/sesion/[id]/versiculos` hacen join con `bible_capitulos` para devolver el número de capítulo en cada verso — necesario para mostrar encabezados de capítulo en el frontend sin queries extra
+- **Stats en `/api/usuario`:** 3 queries secuenciales (plan IDs → sesion IDs → count analisis) porque Supabase JS no soporta subqueries en `.in()`
+- **Versículos en `/analisis`** cargados lazy al expandir card, cacheados en `versiculosMap` por `sesion.id`
+- **Nav** se oculta en `/login` vía `NavWrapper` con `usePathname`
+
+---
+
+## Patrones de UI compartidos
+
+Estos patrones son consistentes en `/estudio`, `/analisis` y `/biblia`:
+
+- **Encabezado de capítulo** — `— Capítulo N —` en Lora/acento con líneas flanqueantes antes del primer verso y en cada cambio de `id_capitulo`
+- **A− / A+** — control de tamaño de texto en 3 niveles (`text-sm`, `text-base`, `text-lg`)
+- **Clic para copiar** — cualquier verso se copia con su referencia completa al portapapeles; feedback visual azul + "copiado"
+- **Hover en versos** — fondo `#F0EDE8` al pasar el ratón
+- **Secciones de análisis colapsables** — accordion individual + "Colapsar todo / Expandir todo"
+- **Divisor centrado** — `— Análisis —` separa texto bíblico de análisis en `/estudio` y `/analisis`
+
+Específico de `/biblia`:
+- **Barra de referencia inteligente** — parsea `Juan 3:16`, `Gén 1`, `Sal 23:1` etc. contra nombres y abreviaturas de libros
+- **Highlight de versículo** — scroll automático + fondo azul suave 2.5s al navegar a versículo específico
+- **Búsqueda full-text** — tab "Buscar texto" → `GET /api/biblia/buscar?q=` con `ilike`, resultados con término resaltado, clic navega al versículo
+- **Explorar por libro** — dropdowns colapsados bajo toggle, disponibles como flujo alternativo
+- **Prev/next capítulo** — flechas al pie con nombre del capítulo adyacente
 
 ---
 
 ## Estado del proyecto — COMPLETADO ✅
 
-Todas las fases implementadas y desplegadas en producción:
+| Fase | Sección | Estado |
+|------|---------|--------|
+| 0 | Autenticación | ✅ |
+| 1 | Layout y Nav responsiva | ✅ |
+| 2 | Dashboard (`/`) | ✅ |
+| 3 | Estudio (`/estudio`) | ✅ |
+| 4 | Biblia (`/biblia`) | ✅ |
+| 5 | Análisis (`/analisis`) | ✅ |
+| 6 | Plan (`/plan`) | ✅ |
+| 7 | Configuración (`/configuracion`) | ✅ |
 
-| Fase | Sección            | Estado |
-|------|--------------------|--------|
-| 0    | Autenticación      | ✅     |
-| 1    | Layout y Nav       | ✅     |
-| 2    | Dashboard (`/`)    | ✅     |
-| 3    | Estudio (`/estudio`)| ✅    |
-| 4    | Biblia (`/biblia`) | ✅     |
-| 5    | Análisis (`/analisis`) | ✅ |
-| 6    | Plan (`/plan`)     | ✅     |
-| 7    | Configuración (`/configuracion`) | ✅ |
-
-Extras implementados sobre el plan original:
+Extras sobre el plan original:
 - Cambio de contraseña con verificación de contraseña actual
 - Zona de peligro (eliminar cuenta con confirmación por texto)
 - Diseño completamente responsive (móvil + desktop)
-- Texto bíblico inline en `/analisis` con carga lazy por sesión
+- Texto bíblico inline en `/analisis` con carga lazy
+- Mejoras de lector: A−/A+, copia de versículos, hover, encabezados de capítulo
+- Búsqueda full-text en `/biblia` + barra de referencia inteligente con highlight
+- Dashboard con saludo dinámico y stats de progreso mejoradas
 
 ---
 
 ## Proyectos relacionados
 
-| Repo                 | Descripción                          | Visibilidad |
-|----------------------|--------------------------------------|-------------|
-| `bible-study-agents` | Agentes Python — análisis con Llama  | Privado     |
-| `bible-study-web`    | Este repo — frontend + backend web   | Público     |
+| Repo | Descripción | Visibilidad |
+|------|-------------|-------------|
+| `bible-study-agents` | Agentes Python — análisis con Llama | Privado |
+| `bible-study-web` | Este repo — frontend + backend web | Público |
