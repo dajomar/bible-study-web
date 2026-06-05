@@ -248,7 +248,7 @@ export default function BibliaPage() {
       rect,
       copiar: () => copiarVersiculo(v),
       compartir: () => compartirVersiculo(v.texto, verseRef),
-      comparar: () => router.push(`/biblia?modo=comparar&ref=${encodeURIComponent(libro ? libro.nombre + " " + capituloNum : capituloNum)}`),
+      comparar: () => router.push(`/comparar?libro=${encodeURIComponent(libro ? libro.nombre : "")}&capitulo=${capituloNum}&versiculo=${v.numero}`),
     };
   }
 

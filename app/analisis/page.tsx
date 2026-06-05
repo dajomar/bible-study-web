@@ -301,7 +301,7 @@ export default function AnalisisPage() {
                                     setMenuState({ versiculoId: v.id, rect,
                                       copiar: () => copiarVersiculo(v, referencia),
                                       compartir: () => compartirVersiculo(v.texto, verseRef),
-                                      comparar: () => router.push(`/biblia?modo=comparar&ref=${encodeURIComponent(libroNombre + " " + v.capitulo_numero)}`),
+                                      comparar: () => router.push(`/comparar?libro=${encodeURIComponent(libroNombre)}&capitulo=${v.capitulo_numero}&versiculo=${v.numero}`),
                                     });
                                   }}
                                   onClick={(e) => {
@@ -314,7 +314,7 @@ export default function AnalisisPage() {
                                     setMenuState({ versiculoId: v.id, rect,
                                       copiar: () => copiarVersiculo(v, referencia),
                                       compartir: () => compartirVersiculo(v.texto, verseRef),
-                                      comparar: () => router.push(`/biblia?modo=comparar&ref=${encodeURIComponent(libroNombre + " " + v.capitulo_numero)}`),
+                                      comparar: () => router.push(`/comparar?libro=${encodeURIComponent(libroNombre)}&capitulo=${v.capitulo_numero}&versiculo=${v.numero}`),
                                     });
                                   }}
                                   title="Toca para opciones · arrastra para resaltar"
