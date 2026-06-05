@@ -48,32 +48,42 @@ export async function GET() {
   const inicioCapitulo = inicio.id_capitulo;
   const finCapitulo = fin.id_capitulo;
 
-  let versiculos: { id: number; numero: number; texto: string; id_capitulo: number }[] = [];
+  let versiculos: { id: number; numero: number; texto: string; id_capitulo: number; capitulo_numero: number }[] = [];
 
   if (inicioCapitulo === finCapitulo) {
-    // Mismo capítulo — rango simple por número
     const inicioNum = inicio.numero;
     const finNum = fin.numero;
 
     const { data } = await supabase
       .from("bible_versiculos")
-      .select("id, numero, texto, id_capitulo")
+      .select("id, numero, texto, id_capitulo, capitulo:id_capitulo (numero)")
       .eq("id_capitulo", inicioCapitulo)
       .gte("numero", inicioNum)
       .lte("numero", finNum)
       .order("numero", { ascending: true });
 
-    versiculos = data ?? [];
+    versiculos = (data ?? []).map((v) => ({
+      id: v.id,
+      numero: v.numero,
+      texto: v.texto,
+      id_capitulo: v.id_capitulo,
+      capitulo_numero: (v.capitulo as unknown as { numero: number }).numero,
+    }));
   } else {
-    // Capítulos distintos — traemos por id entre inicio y fin
     const { data } = await supabase
       .from("bible_versiculos")
-      .select("id, numero, texto, id_capitulo")
+      .select("id, numero, texto, id_capitulo, capitulo:id_capitulo (numero)")
       .gte("id", inicioId)
       .lte("id", finId)
       .order("id", { ascending: true });
 
-    versiculos = data ?? [];
+    versiculos = (data ?? []).map((v) => ({
+      id: v.id,
+      numero: v.numero,
+      texto: v.texto,
+      id_capitulo: v.id_capitulo,
+      capitulo_numero: (v.capitulo as unknown as { numero: number }).numero,
+    }));
   }
 
   // Análisis de esta sesión (si ya existe, generado por el agente Python)
