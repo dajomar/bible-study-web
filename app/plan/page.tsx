@@ -57,6 +57,16 @@ export default function PlanPage() {
     await cargar();
   }
 
+  async function handleArchivar(planId: number) {
+    await apiClient.put(`/api/plan/${planId}`, { activo: false });
+    await cargar();
+  }
+
+  async function handleEliminar(planId: number) {
+    await apiClient.delete(`/api/plan/${planId}`);
+    await cargar();
+  }
+
   function handlePlanCreado() {
     setMostrarFormulario(false);
     cargar();
@@ -101,7 +111,13 @@ export default function PlanPage() {
       {planActivo && (
         <section className="mb-8 md:mb-10">
           <p className="font-inter text-xs text-[#8A8A8A] uppercase tracking-wide mb-3">Plan activo</p>
-          <PlanCard plan={planActivo} activo sesiones={data.sesiones} />
+          <PlanCard
+            plan={planActivo}
+            activo
+            sesiones={data.sesiones}
+            onArchivar={() => handleArchivar(planActivo.id)}
+            onEliminar={() => handleEliminar(planActivo.id)}
+          />
         </section>
       )}
 
@@ -117,7 +133,14 @@ export default function PlanPage() {
           <p className="font-inter text-xs text-[#8A8A8A] uppercase tracking-wide mb-3">Otros planes</p>
           <div className="space-y-3">
             {otrosPlanes.map((p) => (
-              <PlanCard key={p.id} plan={p} activo={false} sesiones={[]} onActivar={() => handleActivar(p.id)} />
+              <PlanCard
+                key={p.id}
+                plan={p}
+                activo={false}
+                sesiones={[]}
+                onActivar={() => handleActivar(p.id)}
+                onEliminar={() => handleEliminar(p.id)}
+              />
             ))}
           </div>
         </section>
@@ -127,11 +150,15 @@ export default function PlanPage() {
 }
 
 function PlanCard({
-  plan, activo, sesiones, onActivar,
+  plan, activo, sesiones, onActivar, onArchivar, onEliminar,
 }: {
-  plan: Plan; activo: boolean; sesiones: Sesion[]; onActivar?: () => void;
+  plan: Plan; activo: boolean; sesiones: Sesion[];
+  onActivar?: () => void;
+  onArchivar?: () => void;
+  onEliminar: () => void;
 }) {
   const [expandido, setExpandido] = useState(activo);
+  const [confirmandoEliminar, setConfirmandoEliminar] = useState(false);
   const { progreso } = plan;
 
   const librosTotal = Array.from(new Set(sesiones.map((s) => s.inicio.capitulo.libro.nombre)));
@@ -197,6 +224,14 @@ function PlanCard({
               Activar
             </button>
           )}
+          {activo && onArchivar && (
+            <button
+              onClick={onArchivar}
+              className="font-inter text-xs text-[#8A8A8A] border border-[#E8E4DF] px-3 py-1.5 rounded-lg hover:border-[#8A8A8A] transition-colors"
+            >
+              Archivar
+            </button>
+          )}
           {sesiones.length > 0 && (
             <button
               onClick={() => setExpandido((v) => !v)}
@@ -205,6 +240,32 @@ function PlanCard({
               {expandido ? "Ocultar sesiones" : "Ver sesiones"}
             </button>
           )}
+          <div className="ml-auto">
+            {confirmandoEliminar ? (
+              <div className="flex items-center gap-2">
+                <span className="font-inter text-xs text-[#8A8A8A]">¿Eliminar plan y todo su historial?</span>
+                <button
+                  onClick={onEliminar}
+                  className="font-inter text-xs text-red-500 hover:text-red-700 transition-colors font-medium"
+                >
+                  Sí, eliminar
+                </button>
+                <button
+                  onClick={() => setConfirmandoEliminar(false)}
+                  className="font-inter text-xs text-[#8A8A8A] hover:text-[#2C2C2C] transition-colors"
+                >
+                  Cancelar
+                </button>
+              </div>
+            ) : (
+              <button
+                onClick={() => setConfirmandoEliminar(true)}
+                className="font-inter text-xs text-[#8A8A8A] hover:text-red-400 transition-colors"
+              >
+                Eliminar
+              </button>
+            )}
+          </div>
         </div>
       </div>
 
