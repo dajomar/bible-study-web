@@ -21,6 +21,7 @@ interface Sesion {
   capituloFin: CapituloInfo;
   versiculoInicioNum: number;
   versiculoFinNum: number;
+  planNombre?: string;
 }
 
 interface Versiculo {
@@ -176,7 +177,7 @@ export default function EstudioPage() {
       {/* Encabezado */}
       <div className="mb-8 md:mb-10">
         <p className="font-inter text-xs text-[#8A8A8A] uppercase tracking-wide mb-2">
-          Día {sesion.orden} · Sesión de estudio
+          {sesion.planNombre ? `${sesion.planNombre} · ` : ""}Día {sesion.orden}
         </p>
         <h1 className="font-lora text-2xl md:text-3xl text-[#2C2C2C] mb-1">{referencia}</h1>
         {sesion.fecha_programada && (

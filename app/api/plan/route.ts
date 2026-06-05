@@ -15,33 +15,35 @@ export async function GET() {
       sesiones:bible_sesiones ( id, completada )
     `)
     .eq("id_usuario", user.id)
+    .order("activo", { ascending: false })
     .order("created_at", { ascending: false });
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
 
-  // Para el plan activo, traemos las sesiones completas con referencia bíblica
-  const planActivo = (planes ?? []).find((p) => p.activo);
-  let sesiones: unknown[] = [];
+  // Para todos los planes activos, traemos las sesiones completas con referencia bíblica
+  const planesActivos = (planes ?? []).filter((p) => p.activo);
+  const sesionesMap: Record<number, unknown[]> = {};
 
-  if (planActivo) {
-    const { data } = await supabase
-      .from("bible_sesiones")
-      .select(`
-        id, orden, completada, fecha_programada, fecha_completada,
-        inicio:versiculo_inicio_id (
-          numero,
-          capitulo:id_capitulo ( numero, libro:id_libro ( nombre ) )
-        ),
-        fin:versiculo_fin_id (
-          numero,
-          capitulo:id_capitulo ( numero, libro:id_libro ( nombre ) )
-        )
-      `)
-      .eq("id_plan", planActivo.id)
-      .order("orden", { ascending: true });
-
-    sesiones = data ?? [];
-  }
+  await Promise.all(
+    planesActivos.map(async (p) => {
+      const { data } = await supabase
+        .from("bible_sesiones")
+        .select(`
+          id, orden, completada, fecha_programada, fecha_completada,
+          inicio:versiculo_inicio_id (
+            numero,
+            capitulo:id_capitulo ( numero, libro:id_libro ( nombre ) )
+          ),
+          fin:versiculo_fin_id (
+            numero,
+            capitulo:id_capitulo ( numero, libro:id_libro ( nombre ) )
+          )
+        `)
+        .eq("id_plan", p.id)
+        .order("orden", { ascending: true });
+      sesionesMap[p.id] = data ?? [];
+    })
+  );
 
   // Añadir métricas de progreso a cada plan
   const planesConProgreso = (planes ?? []).map((p) => {
@@ -59,7 +61,7 @@ export async function GET() {
     };
   });
 
-  return NextResponse.json({ planes: planesConProgreso, sesiones });
+  return NextResponse.json({ planes: planesConProgreso, sesionesMap });
 }
 
 export async function POST(request: NextRequest) {
@@ -71,12 +73,6 @@ export async function POST(request: NextRequest) {
   if (!nombre?.trim()) {
     return NextResponse.json({ error: "El nombre es requerido" }, { status: 400 });
   }
-
-  // Desactivar planes existentes antes de crear el nuevo
-  await supabase
-    .from("bible_planes")
-    .update({ activo: false })
-    .eq("id_usuario", user.id);
 
   const { data, error } = await supabase
     .from("bible_planes")

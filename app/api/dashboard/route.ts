@@ -9,13 +9,15 @@ export async function GET() {
 
   const hoy = new Date().toISOString().split("T")[0];
 
-  // Plan activo
-  const { data: plan } = await supabase
+  // Plan activo (el más reciente en caso de duplicados)
+  const { data: planesActivos } = await supabase
     .from("bible_planes")
     .select("id, nombre")
     .eq("id_usuario", user.id)
     .eq("activo", true)
-    .maybeSingle();
+    .order("created_at", { ascending: false })
+    .limit(1);
+  const plan = planesActivos?.[0] ?? null;
 
   // Otros planes (inactivos/archivados)
   const { data: otrosPlanesRaw } = await supabase

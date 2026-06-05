@@ -52,14 +52,6 @@ export async function PUT(
 
   if (!plan) return NextResponse.json({ error: "Plan no encontrado" }, { status: 404 });
 
-  // Si se activa, desactivar el resto
-  if (activo) {
-    await supabase
-      .from("bible_planes")
-      .update({ activo: false })
-      .eq("id_usuario", user.id);
-  }
-
   const { error } = await supabase
     .from("bible_planes")
     .update({ activo })

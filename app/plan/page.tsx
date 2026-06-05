@@ -26,7 +26,7 @@ interface Sesion {
   fin: { numero: number; capitulo: CapInfo };
 }
 
-interface PlanData { planes: Plan[]; sesiones: Sesion[] }
+interface PlanData { planes: Plan[]; sesionesMap: Record<number, Sesion[]> }
 
 function buildRef(s: Sesion): string {
   const ini = s.inicio;
@@ -75,7 +75,7 @@ export default function PlanPage() {
   if (loading) return <LoadingSkeleton />;
   if (!data) return null;
 
-  const planActivo = data.planes.find((p) => p.activo);
+  const planesActivos = data.planes.filter((p) => p.activo);
   const otrosPlanes = data.planes.filter((p) => !p.activo);
 
   return (
@@ -108,20 +108,27 @@ export default function PlanPage() {
         <NuevoPlanForm onCreado={handlePlanCreado} onCancelar={() => setMostrarFormulario(false)} />
       )}
 
-      {planActivo && (
+      {planesActivos.length > 0 && (
         <section className="mb-8 md:mb-10">
-          <p className="font-inter text-xs text-[#8A8A8A] uppercase tracking-wide mb-3">Plan activo</p>
-          <PlanCard
-            plan={planActivo}
-            activo
-            sesiones={data.sesiones}
-            onArchivar={() => handleArchivar(planActivo.id)}
-            onEliminar={() => handleEliminar(planActivo.id)}
-          />
+          <p className="font-inter text-xs text-[#8A8A8A] uppercase tracking-wide mb-3">
+            {planesActivos.length === 1 ? "Plan activo" : "Planes activos"}
+          </p>
+          <div className="space-y-3">
+            {planesActivos.map((p) => (
+              <PlanCard
+                key={p.id}
+                plan={p}
+                activo
+                sesiones={data.sesionesMap[p.id] ?? []}
+                onArchivar={() => handleArchivar(p.id)}
+                onEliminar={() => handleEliminar(p.id)}
+              />
+            ))}
+          </div>
         </section>
       )}
 
-      {data.planes.length === 0 && !mostrarFormulario && (
+      {planesActivos.length === 0 && otrosPlanes.length === 0 && !mostrarFormulario && (
         <div className="border border-[#E8E4DF] rounded-xl p-6 md:p-8 text-center">
           <p className="font-lora text-lg text-[#2C2C2C] mb-2">Sin planes todavía</p>
           <p className="font-inter text-sm text-[#8A8A8A]">Crea un plan para comenzar tu estudio.</p>

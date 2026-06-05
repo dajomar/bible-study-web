@@ -10,13 +10,15 @@ export async function GET() {
     return NextResponse.json({ error: "No autenticado" }, { status: 401 });
   }
 
-  // Plan activo del usuario
-  const { data: plan } = await supabase
+  // Plan activo del usuario (el más reciente en caso de duplicados)
+  const { data: planesActivos } = await supabase
     .from("bible_planes")
-    .select("id")
+    .select("id, nombre")
     .eq("id_usuario", user.id)
     .eq("activo", true)
-    .single();
+    .order("created_at", { ascending: false })
+    .limit(1);
+  const plan = planesActivos?.[0] ?? null;
 
   if (!plan) {
     return NextResponse.json({ sesion: null, versiculos: [], secciones: [], analisis: null, sinPlan: true });
@@ -135,6 +137,7 @@ export async function GET() {
       capituloFin: capFinInfo,
       versiculoInicioNum: inicio.numero,
       versiculoFinNum: fin.numero,
+      planNombre: plan.nombre,
     },
     versiculos,
     secciones: secciones ?? [],

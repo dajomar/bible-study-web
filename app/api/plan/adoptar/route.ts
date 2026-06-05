@@ -26,7 +26,14 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: "Versión bíblica no válida" }, { status: 400 });
   }
 
-  // 1. Obtener todas las sesiones del template (vía fases, ordenadas)
+  // 1. Obtener descripción del template
+  const { data: template } = await supabase
+    .from("bible_planes_templates")
+    .select("descripcion")
+    .eq("id", id_template)
+    .single();
+
+  // 2. Obtener todas las sesiones del template (vía fases, ordenadas)
   const { data: fases, error: fError } = await supabase
     .from("bible_planes_templates_fases")
     .select("numero, sesiones:bible_planes_templates_sesiones ( orden, abreviatura_libro, capitulo_inicio, capitulo_fin )")
@@ -122,7 +129,7 @@ export async function POST(request: NextRequest) {
   // 6. Crear el plan
   const { data: plan, error: planError } = await supabase
     .from("bible_planes")
-    .insert({ id_usuario: user.id, nombre: nombre_plan.trim(), activo: true })
+    .insert({ id_usuario: user.id, nombre: nombre_plan.trim(), descripcion: template?.descripcion ?? null, activo: true })
     .select("id")
     .single();
 
@@ -131,6 +138,13 @@ export async function POST(request: NextRequest) {
   }
 
   // 7. Construir e insertar sesiones en lotes de 500
+  // Fecha de inicio: hoy; si es domingo (0) avanzar al lunes
+  const fechaInicio = new Date();
+  fechaInicio.setHours(0, 0, 0, 0);
+  while (fechaInicio.getDay() === 0) fechaInicio.setDate(fechaInicio.getDate() + 1);
+  const fechaCursor = new Date(fechaInicio);
+  let primeraValida = true;
+
   const sesionesInsert = sesiones
     .map((s, i) => {
       const libroId = libroMap[s.abreviatura_libro];
@@ -140,12 +154,22 @@ export async function POST(request: NextRequest) {
       const vsIni = inicioMap[capInicioId];
       const vsFin = finMap[capFinId];
       if (!vsIni || !vsFin) return null;
+
+      // Avanzar fecha (excepto la primera sesión válida)
+      if (!primeraValida) {
+        fechaCursor.setDate(fechaCursor.getDate() + 1);
+        while (fechaCursor.getDay() === 0) fechaCursor.setDate(fechaCursor.getDate() + 1);
+      }
+      primeraValida = false;
+      const fecha_programada = fechaCursor.toISOString().split("T")[0];
+
       return {
         id_plan: plan.id,
         orden: i + 1,
         versiculo_inicio_id: vsIni,
         versiculo_fin_id: vsFin,
         completada: false,
+        fecha_programada,
       };
     })
     .filter(Boolean) as {
@@ -154,6 +178,7 @@ export async function POST(request: NextRequest) {
       versiculo_inicio_id: number;
       versiculo_fin_id: number;
       completada: boolean;
+      fecha_programada: string;
     }[];
 
   const BATCH = 500;
