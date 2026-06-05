@@ -59,12 +59,20 @@ function buildReferencia(sesion: Sesion): string {
   return `${ini.libro.nombre} ${ini.numero}:${sesion.versiculoInicioNum} – ${fin.libro.nombre} ${fin.numero}:${sesion.versiculoFinNum}`;
 }
 
+const FONT_SIZES = [
+  "text-sm leading-7",
+  "text-base leading-8",
+  "text-lg leading-9",
+];
+
 export default function EstudioPage() {
   const router = useRouter();
   const [data, setData] = useState<EstudioData | null>(null);
   const [loading, setLoading] = useState(true);
   const [completing, setCompleting] = useState(false);
   const [error, setError] = useState("");
+  const [tamano, setTamano] = useState(1);
+  const [copiado, setCopiado] = useState<number | null>(null);
 
   useEffect(() => {
     apiClient
@@ -84,6 +92,20 @@ export default function EstudioPage() {
     } catch {
       setError("No se pudo marcar como completada");
       setCompleting(false);
+    }
+  }
+
+  async function copiarVersiculo(v: Versiculo, referencia: string) {
+    const texto = `${v.texto} — ${referencia.split("–")[0].trim().split(" – ")[0]} ${v.numero > 1 ? "" : ""}`.trim();
+    // Construir referencia precisa del versículo
+    const ref = referencia;
+    const textoCopia = `${v.texto} — ${ref.split(":")[0]}:${v.numero}`;
+    try {
+      await navigator.clipboard.writeText(textoCopia);
+      setCopiado(v.id);
+      setTimeout(() => setCopiado(null), 1800);
+    } catch {
+      // clipboard no disponible
     }
   }
 
@@ -115,17 +137,63 @@ export default function EstudioPage() {
 
       {/* Texto bíblico */}
       <section className="mb-10 md:mb-12">
-        <div className="space-y-1">
+        {/* Cabecera de sección con controles */}
+        <div className="flex items-center justify-between mb-5 pb-3 border-b border-[#E8E4DF]">
+          <div>
+            <p className="font-inter text-xs text-[#8A8A8A] uppercase tracking-wide">Texto</p>
+            {versiculos.length > 0 && (
+              <p className="font-inter text-xs text-[#8A8A8A] mt-0.5">{versiculos.length} versículos</p>
+            )}
+          </div>
+          <div className="flex items-center gap-1 border border-[#E8E4DF] rounded-lg overflow-hidden">
+            <button
+              onClick={() => setTamano((t) => Math.max(0, t - 1))}
+              disabled={tamano === 0}
+              className="px-3 py-2 font-inter text-xs text-[#8A8A8A] hover:bg-[#F0EDE8] transition-colors disabled:opacity-30"
+              title="Reducir texto"
+            >
+              A−
+            </button>
+            <div className="w-px h-5 bg-[#E8E4DF]" />
+            <button
+              onClick={() => setTamano((t) => Math.min(FONT_SIZES.length - 1, t + 1))}
+              disabled={tamano === FONT_SIZES.length - 1}
+              className="px-3 py-2 font-inter text-sm text-[#8A8A8A] hover:bg-[#F0EDE8] transition-colors disabled:opacity-30"
+              title="Aumentar texto"
+            >
+              A+
+            </button>
+          </div>
+        </div>
+
+        <div className="space-y-0.5">
           {versiculos.map((v) => (
-            <p key={v.id} className="font-lora text-base md:text-[1.05rem] leading-8 text-[#2C2C2C]">
-              <span className="text-[#8A8A8A] text-xs align-super mr-1.5 font-inter">
-                {v.numero}
-              </span>
+            <p
+              key={v.id}
+              onClick={() => copiarVersiculo(v, referencia)}
+              title="Clic para copiar"
+              className={`font-lora ${FONT_SIZES[tamano]} text-[#2C2C2C] rounded-md px-2 -mx-2 cursor-pointer transition-colors ${
+                copiado === v.id
+                  ? "bg-[#4A6FA5]/10 text-[#4A6FA5]"
+                  : "hover:bg-[#F0EDE8]"
+              }`}
+            >
+              <span className="text-[#8A8A8A] text-xs align-super mr-1.5 font-inter">{v.numero}</span>
               {v.texto}
+              {copiado === v.id && (
+                <span className="ml-2 font-inter text-xs text-[#4A6FA5] not-italic">copiado</span>
+              )}
             </p>
           ))}
         </div>
       </section>
+
+      {/* Divisor */}
+      <div className="flex items-center gap-4 mb-10 md:mb-12">
+        <div className="flex-1 h-px bg-[#E8E4DF]" />
+        <span className="font-inter text-xs text-[#8A8A8A] uppercase tracking-widest">Análisis</span>
+        <div className="flex-1 h-px bg-[#E8E4DF]" />
+      </div>
 
       {/* Análisis */}
       {analisis ? <AnalisisSection analisis={analisis} /> : <SinAnalisis />}
@@ -145,7 +213,7 @@ export default function EstudioPage() {
 
       {sesion.completada && (
         <div className="mt-10 md:mt-12 pt-6 md:pt-8 border-t border-[#E8E4DF]">
-          <span className="font-inter text-sm text-[#8A8A8A]">✓ Sesión completada</span>
+          <span className="font-inter text-sm text-[#4A6FA5]">✓ Sesión completada</span>
         </div>
       )}
     </main>
@@ -161,19 +229,50 @@ function AnalisisSection({ analisis }: { analisis: Analisis }) {
     { label: "Preguntas para reflexión", contenido: analisis.preguntas_reflexion },
   ].filter((s) => s.contenido);
 
+  const [abiertos, setAbiertos] = useState<Record<string, boolean>>(
+    Object.fromEntries(secciones.map((s) => [s.label, true]))
+  );
+
+  function toggle(label: string) {
+    setAbiertos((prev) => ({ ...prev, [label]: !prev[label] }));
+  }
+
   return (
     <section>
       <div className="flex items-center justify-between mb-6">
-        <h2 className="font-lora text-xl text-[#2C2C2C]">Análisis</h2>
         <span className="font-inter text-xs text-[#8A8A8A] bg-[#FAF8F5] border border-[#E8E4DF] px-2 py-1 rounded-full">
           {analisis.modelo_usado}
         </span>
+        <button
+          onClick={() => {
+            const algunoAbierto = secciones.some((s) => abiertos[s.label]);
+            setAbiertos(Object.fromEntries(secciones.map((s) => [s.label, !algunoAbierto])));
+          }}
+          className="font-inter text-xs text-[#8A8A8A] hover:text-[#2C2C2C] transition-colors"
+        >
+          {secciones.some((s) => abiertos[s.label]) ? "Colapsar todo" : "Expandir todo"}
+        </button>
       </div>
-      <div className="space-y-8">
+
+      <div className="space-y-2">
         {secciones.map(({ label, contenido }) => (
-          <div key={label}>
-            <h3 className="font-inter text-xs text-[#8A8A8A] uppercase tracking-wide mb-3">{label}</h3>
-            <div className="font-inter text-sm text-[#2C2C2C] leading-7 whitespace-pre-line">{contenido}</div>
+          <div key={label} className="border border-[#E8E4DF] rounded-xl overflow-hidden">
+            <button
+              onClick={() => toggle(label)}
+              className="w-full flex items-center justify-between px-5 py-4 hover:bg-[#FAF8F5] transition-colors"
+            >
+              <h3 className="font-inter text-xs text-[#8A8A8A] uppercase tracking-wide">{label}</h3>
+              <span className={`font-inter text-xs text-[#8A8A8A] transition-transform ${abiertos[label] ? "rotate-180" : ""}`}>
+                ▾
+              </span>
+            </button>
+            {abiertos[label] && (
+              <div className="px-5 pb-5 border-t border-[#E8E4DF]">
+                <p className="font-inter text-sm text-[#2C2C2C] leading-7 whitespace-pre-line pt-4">
+                  {contenido}
+                </p>
+              </div>
+            )}
           </div>
         ))}
       </div>
@@ -217,11 +316,10 @@ function LoadingSkeleton() {
           <div key={i} className="h-5 bg-[#E8E4DF] rounded animate-pulse" style={{ width: `${75 + (i * 7) % 25}%` }} />
         ))}
       </div>
-      <div className="space-y-6">
-        {[...Array(3)].map((_, i) => (
-          <div key={i}>
-            <div className="h-3 w-28 bg-[#E8E4DF] rounded mb-3 animate-pulse" />
-            <div className="h-16 bg-[#E8E4DF] rounded animate-pulse" />
+      <div className="space-y-3">
+        {[...Array(4)].map((_, i) => (
+          <div key={i} className="border border-[#E8E4DF] rounded-xl p-5">
+            <div className="h-3 w-28 bg-[#E8E4DF] rounded animate-pulse" />
           </div>
         ))}
       </div>
