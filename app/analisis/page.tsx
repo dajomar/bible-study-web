@@ -28,6 +28,13 @@ interface Analisis {
   sesion: SesionInfo;
 }
 
+interface Versiculo {
+  id: number;
+  numero: number;
+  texto: string;
+  id_capitulo: number;
+}
+
 function buildReferencia(sesion: SesionInfo): string {
   const ini = sesion.inicio;
   const fin = sesion.fin;
@@ -51,6 +58,8 @@ export default function AnalisisPage() {
   const [lista, setLista] = useState<Analisis[]>([]);
   const [loading, setLoading] = useState(true);
   const [abierto, setAbierto] = useState<number | null>(null);
+  const [versiculosMap, setVersiculosMap] = useState<Record<number, Versiculo[]>>({});
+  const [loadingVers, setLoadingVers] = useState<number | null>(null);
 
   useEffect(() => {
     apiClient
@@ -59,8 +68,29 @@ export default function AnalisisPage() {
       .finally(() => setLoading(false));
   }, []);
 
-  function toggle(id: number) {
-    setAbierto((prev) => (prev === id ? null : id));
+  async function toggle(analisis: Analisis) {
+    const { id, sesion } = analisis;
+
+    // Cerrar si ya está abierto
+    if (abierto === id) {
+      setAbierto(null);
+      return;
+    }
+
+    setAbierto(id);
+
+    // Cargar versículos solo si no los tenemos ya
+    if (!versiculosMap[sesion.id]) {
+      setLoadingVers(id);
+      try {
+        const res = await apiClient.get<{ versiculos: Versiculo[] }>(
+          `/api/sesion/${sesion.id}/versiculos`
+        );
+        setVersiculosMap((prev) => ({ ...prev, [sesion.id]: res.data.versiculos }));
+      } finally {
+        setLoadingVers(null);
+      }
+    }
   }
 
   return (
@@ -98,14 +128,16 @@ export default function AnalisisPage() {
           {lista.map((a) => {
             const referencia = buildReferencia(a.sesion);
             const expandido = abierto === a.id;
+            const versiculos = versiculosMap[a.sesion.id] ?? [];
+            const cargandoVers = loadingVers === a.id;
 
             return (
               <div key={a.id} className="border border-[#E8E4DF] rounded-xl overflow-hidden">
+                {/* Cabecera */}
                 <button
-                  onClick={() => toggle(a.id)}
+                  onClick={() => toggle(a)}
                   className="w-full text-left px-4 md:px-6 py-5 hover:bg-[#FAF8F5] transition-colors"
                 >
-                  {/* Metadata row */}
                   <div className="flex items-center justify-between mb-1">
                     <p className="font-inter text-xs text-[#8A8A8A] uppercase tracking-wide">
                       {a.sesion.plan.nombre} · Día {a.sesion.orden}
@@ -114,51 +146,89 @@ export default function AnalisisPage() {
                       <span className="font-inter text-xs text-[#8A8A8A] hidden sm:inline">
                         {formatFecha(a.created_at)}
                       </span>
-                      <span className={`font-inter text-xs text-[#4A6FA5] transition-transform inline-block ${expandido ? "rotate-180" : ""}`}>
+                      <span className={`font-inter text-xs text-[#4A6FA5] inline-block transition-transform ${expandido ? "rotate-180" : ""}`}>
                         ▾
                       </span>
                     </div>
                   </div>
-
-                  {/* Referencia */}
                   <p className="font-lora text-lg text-[#2C2C2C] mb-1">{referencia}</p>
-
-                  {/* Fecha visible solo en móvil */}
                   <p className="font-inter text-xs text-[#8A8A8A] sm:hidden mb-2">
                     {formatFecha(a.created_at)}
                   </p>
-
-                  {/* Resumen truncado */}
                   {a.resumen && (
                     <p className="font-inter text-sm text-[#8A8A8A] line-clamp-2">{a.resumen}</p>
                   )}
                 </button>
 
+                {/* Contenido expandido */}
                 {expandido && (
-                  <div className="border-t border-[#E8E4DF] px-4 md:px-6 py-6">
-                    <span className="font-inter text-xs text-[#8A8A8A] bg-[#FAF8F5] border border-[#E8E4DF] px-2 py-1 rounded-full inline-block mb-6">
-                      {a.modelo_usado}
-                    </span>
+                  <div className="border-t border-[#E8E4DF]">
+                    {/* Texto bíblico */}
+                    <div className="px-4 md:px-6 py-6 border-b border-[#E8E4DF]">
+                      <p className="font-inter text-xs text-[#8A8A8A] uppercase tracking-wide mb-4">
+                        Texto — {referencia}
+                      </p>
 
-                    <div className="space-y-7">
-                      {[
-                        { label: "Contexto histórico", texto: a.contexto_historico },
-                        { label: "Resumen del pasaje", texto: a.resumen },
-                        { label: "Temas principales", texto: a.temas_principales },
-                        { label: "Conexiones bíblicas", texto: a.conexiones },
-                        { label: "Preguntas para reflexión", texto: a.preguntas_reflexion },
-                      ]
-                        .filter((s) => s.texto)
-                        .map(({ label, texto }) => (
-                          <div key={label}>
-                            <h3 className="font-inter text-xs text-[#8A8A8A] uppercase tracking-wide mb-3">
-                              {label}
-                            </h3>
-                            <p className="font-inter text-sm text-[#2C2C2C] leading-7 whitespace-pre-line">
-                              {texto}
+                      {cargandoVers && (
+                        <div className="space-y-2">
+                          {[...Array(6)].map((_, i) => (
+                            <div
+                              key={i}
+                              className="h-4 bg-[#E8E4DF] rounded animate-pulse"
+                              style={{ width: `${60 + (i * 11) % 40}%` }}
+                            />
+                          ))}
+                        </div>
+                      )}
+
+                      {!cargandoVers && versiculos.length > 0 && (
+                        <div className="space-y-0.5">
+                          {versiculos.map((v) => (
+                            <p
+                              key={v.id}
+                              className="font-lora text-base leading-8 text-[#2C2C2C]"
+                            >
+                              <span className="text-[#8A8A8A] text-xs align-super mr-1 font-inter">
+                                {v.numero}
+                              </span>
+                              {v.texto}
                             </p>
-                          </div>
-                        ))}
+                          ))}
+                        </div>
+                      )}
+                    </div>
+
+                    {/* Análisis */}
+                    <div className="px-4 md:px-6 py-6">
+                      <div className="flex items-center justify-between mb-6">
+                        <p className="font-inter text-xs text-[#8A8A8A] uppercase tracking-wide">
+                          Análisis
+                        </p>
+                        <span className="font-inter text-xs text-[#8A8A8A] bg-[#FAF8F5] border border-[#E8E4DF] px-2 py-1 rounded-full">
+                          {a.modelo_usado}
+                        </span>
+                      </div>
+
+                      <div className="space-y-7">
+                        {[
+                          { label: "Contexto histórico", texto: a.contexto_historico },
+                          { label: "Resumen del pasaje", texto: a.resumen },
+                          { label: "Temas principales", texto: a.temas_principales },
+                          { label: "Conexiones bíblicas", texto: a.conexiones },
+                          { label: "Preguntas para reflexión", texto: a.preguntas_reflexion },
+                        ]
+                          .filter((s) => s.texto)
+                          .map(({ label, texto }) => (
+                            <div key={label}>
+                              <h3 className="font-inter text-xs text-[#8A8A8A] uppercase tracking-wide mb-3">
+                                {label}
+                              </h3>
+                              <p className="font-inter text-sm text-[#2C2C2C] leading-7 whitespace-pre-line">
+                                {texto}
+                              </p>
+                            </div>
+                          ))}
+                      </div>
                     </div>
                   </div>
                 )}
