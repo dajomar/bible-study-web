@@ -95,13 +95,13 @@ export default function EstudioPage() {
   const referencia = buildReferencia(sesion);
 
   return (
-    <main className="max-w-3xl mx-auto px-6 py-12">
+    <main className="max-w-3xl mx-auto px-4 md:px-6 py-8 md:py-12">
       {/* Encabezado */}
-      <div className="mb-10">
+      <div className="mb-8 md:mb-10">
         <p className="font-inter text-xs text-[#8A8A8A] uppercase tracking-wide mb-2">
           Día {sesion.orden} · Sesión de estudio
         </p>
-        <h1 className="font-lora text-3xl text-[#2C2C2C] mb-1">{referencia}</h1>
+        <h1 className="font-lora text-2xl md:text-3xl text-[#2C2C2C] mb-1">{referencia}</h1>
         {sesion.fecha_programada && (
           <p className="font-inter text-sm text-[#8A8A8A]">
             {new Date(sesion.fecha_programada + "T00:00:00").toLocaleDateString("es-ES", {
@@ -114,10 +114,10 @@ export default function EstudioPage() {
       </div>
 
       {/* Texto bíblico */}
-      <section className="mb-12">
+      <section className="mb-10 md:mb-12">
         <div className="space-y-1">
           {versiculos.map((v) => (
-            <p key={v.id} className="font-lora text-[1.05rem] leading-8 text-[#2C2C2C]">
+            <p key={v.id} className="font-lora text-base md:text-[1.05rem] leading-8 text-[#2C2C2C]">
               <span className="text-[#8A8A8A] text-xs align-super mr-1.5 font-inter">
                 {v.numero}
               </span>
@@ -128,19 +128,15 @@ export default function EstudioPage() {
       </section>
 
       {/* Análisis */}
-      {analisis ? (
-        <AnalisisSection analisis={analisis} />
-      ) : (
-        <SinAnalisis />
-      )}
+      {analisis ? <AnalisisSection analisis={analisis} /> : <SinAnalisis />}
 
-      {/* Acción: marcar completada */}
+      {/* Marcar completada */}
       {!sesion.completada && (
-        <div className="mt-12 pt-8 border-t border-[#E8E4DF]">
+        <div className="mt-10 md:mt-12 pt-6 md:pt-8 border-t border-[#E8E4DF]">
           <button
             onClick={handleCompletar}
             disabled={completing}
-            className="bg-[#4A6FA5] text-white font-inter text-sm font-medium px-6 py-3 rounded-lg hover:bg-[#3d5f8f] transition-colors disabled:opacity-50"
+            className="w-full md:w-auto bg-[#4A6FA5] text-white font-inter text-sm font-medium px-6 py-3 rounded-lg hover:bg-[#3d5f8f] transition-colors disabled:opacity-50"
           >
             {completing ? "Guardando..." : "Marcar sesión como completada"}
           </button>
@@ -148,15 +144,13 @@ export default function EstudioPage() {
       )}
 
       {sesion.completada && (
-        <div className="mt-12 pt-8 border-t border-[#E8E4DF]">
+        <div className="mt-10 md:mt-12 pt-6 md:pt-8 border-t border-[#E8E4DF]">
           <span className="font-inter text-sm text-[#8A8A8A]">✓ Sesión completada</span>
         </div>
       )}
     </main>
   );
 }
-
-/* ── Análisis ──────────────────────────────────────────── */
 
 function AnalisisSection({ analisis }: { analisis: Analisis }) {
   const secciones = [
@@ -175,16 +169,11 @@ function AnalisisSection({ analisis }: { analisis: Analisis }) {
           {analisis.modelo_usado}
         </span>
       </div>
-
       <div className="space-y-8">
         {secciones.map(({ label, contenido }) => (
           <div key={label}>
-            <h3 className="font-inter text-xs text-[#8A8A8A] uppercase tracking-wide mb-3">
-              {label}
-            </h3>
-            <div className="font-inter text-sm text-[#2C2C2C] leading-7 whitespace-pre-line">
-              {contenido}
-            </div>
+            <h3 className="font-inter text-xs text-[#8A8A8A] uppercase tracking-wide mb-3">{label}</h3>
+            <div className="font-inter text-sm text-[#2C2C2C] leading-7 whitespace-pre-line">{contenido}</div>
           </div>
         ))}
       </div>
@@ -203,12 +192,10 @@ function SinAnalisis() {
   );
 }
 
-/* ── Estados ───────────────────────────────────────────── */
-
 function SinSesion() {
   return (
-    <main className="max-w-3xl mx-auto px-6 py-12">
-      <div className="border border-[#E8E4DF] rounded-xl p-8 text-center">
+    <main className="max-w-3xl mx-auto px-4 md:px-6 py-8 md:py-12">
+      <div className="border border-[#E8E4DF] rounded-xl p-6 md:p-8 text-center">
         <p className="font-lora text-xl text-[#2C2C2C] mb-2">No hay sesiones pendientes</p>
         <p className="font-inter text-sm text-[#8A8A8A]">
           Has completado todas las sesiones del plan activo, o aún no tienes un plan.
@@ -220,14 +207,14 @@ function SinSesion() {
 
 function LoadingSkeleton() {
   return (
-    <main className="max-w-3xl mx-auto px-6 py-12">
-      <div className="mb-10">
+    <main className="max-w-3xl mx-auto px-4 md:px-6 py-8 md:py-12">
+      <div className="mb-8">
         <div className="h-3 w-24 bg-[#E8E4DF] rounded mb-3 animate-pulse" />
         <div className="h-8 w-64 bg-[#E8E4DF] rounded animate-pulse" />
       </div>
-      <div className="space-y-2 mb-12">
+      <div className="space-y-2 mb-10">
         {[...Array(8)].map((_, i) => (
-          <div key={i} className="h-5 bg-[#E8E4DF] rounded animate-pulse" style={{ width: `${75 + Math.random() * 25}%` }} />
+          <div key={i} className="h-5 bg-[#E8E4DF] rounded animate-pulse" style={{ width: `${75 + (i * 7) % 25}%` }} />
         ))}
       </div>
       <div className="space-y-6">
@@ -244,7 +231,7 @@ function LoadingSkeleton() {
 
 function ErrorMsg({ msg }: { msg: string }) {
   return (
-    <main className="max-w-3xl mx-auto px-6 py-12">
+    <main className="max-w-3xl mx-auto px-4 md:px-6 py-8 md:py-12">
       <p className="font-inter text-sm text-red-500">{msg}</p>
     </main>
   );

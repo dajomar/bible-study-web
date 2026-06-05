@@ -72,25 +72,18 @@ export default function DashboardPage() {
   });
 
   return (
-    <main className="max-w-4xl mx-auto px-6 py-12">
-      {/* Encabezado */}
-      <div className="mb-10">
+    <main className="max-w-4xl mx-auto px-4 md:px-6 py-8 md:py-12">
+      <div className="mb-8">
         <p className="font-inter text-sm text-[#8A8A8A] capitalize mb-1">{hoy}</p>
-        <h1 className="font-lora text-3xl text-[#2C2C2C]">Buenos días</h1>
+        <h1 className="font-lora text-2xl md:text-3xl text-[#2C2C2C]">Buenos días</h1>
       </div>
 
-      {/* Sin plan */}
       {!data.plan && <SinPlan />}
 
       {data.plan && (
-        <div className="space-y-6">
-          {/* Sesión de hoy */}
+        <div className="space-y-4 md:space-y-6">
           <SesionCard sesion={data.sesionHoy} planNombre={data.plan.nombre} />
-
-          {/* Progreso */}
           {data.progreso && <ProgresoCard progreso={data.progreso} planNombre={data.plan.nombre} />}
-
-          {/* Tareas pendientes */}
           {data.tareasHoy.length > 0 && <TareasCard tareas={data.tareasHoy} />}
         </div>
       )}
@@ -98,11 +91,9 @@ export default function DashboardPage() {
   );
 }
 
-/* ── Subcomponentes ──────────────────────────────────── */
-
 function SinPlan() {
   return (
-    <div className="border border-[#E8E4DF] rounded-xl p-8 text-center">
+    <div className="border border-[#E8E4DF] rounded-xl p-6 md:p-8 text-center">
       <p className="font-lora text-lg text-[#2C2C2C] mb-2">No tienes un plan activo</p>
       <p className="font-inter text-sm text-[#8A8A8A] mb-6">
         Crea un plan de lectura para comenzar tu estudio.
@@ -117,22 +108,14 @@ function SinPlan() {
   );
 }
 
-function SesionCard({
-  sesion,
-  planNombre,
-}: {
-  sesion: SesionHoy | null;
-  planNombre: string;
-}) {
+function SesionCard({ sesion, planNombre }: { sesion: SesionHoy | null; planNombre: string }) {
   if (!sesion) {
     return (
-      <div className="border border-[#E8E4DF] rounded-xl p-6">
+      <div className="border border-[#E8E4DF] rounded-xl p-5 md:p-6">
         <p className="font-inter text-xs text-[#8A8A8A] uppercase tracking-wide mb-1">
           Sesión de hoy · {planNombre}
         </p>
-        <p className="font-inter text-sm text-[#8A8A8A]">
-          No hay sesión programada para hoy.
-        </p>
+        <p className="font-inter text-sm text-[#8A8A8A]">No hay sesión programada para hoy.</p>
       </div>
     );
   }
@@ -140,34 +123,29 @@ function SesionCard({
   const ref = referenciaBiblica(sesion);
 
   return (
-    <div className="border border-[#E8E4DF] rounded-xl p-6">
-      <div className="flex items-start justify-between gap-4">
-        <div>
-          <p className="font-inter text-xs text-[#8A8A8A] uppercase tracking-wide mb-2">
-            Sesión de hoy · {planNombre}
-          </p>
-          <p className="font-lora text-xl text-[#2C2C2C] mb-1">{ref}</p>
-          <p className="font-inter text-sm text-[#8A8A8A]">
-            Día {sesion.orden}
-            {sesion.completada && " · Completada"}
-          </p>
-        </div>
+    <div className="border border-[#E8E4DF] rounded-xl p-5 md:p-6">
+      <p className="font-inter text-xs text-[#8A8A8A] uppercase tracking-wide mb-2">
+        Sesión de hoy · {planNombre}
+      </p>
+      <p className="font-lora text-xl text-[#2C2C2C] mb-1">{ref}</p>
+      <p className="font-inter text-sm text-[#8A8A8A] mb-4">
+        Día {sesion.orden}{sesion.completada && " · Completada"}
+      </p>
 
-        {!sesion.completada && (
-          <Link
-            href="/estudio"
-            className="shrink-0 bg-[#4A6FA5] text-white font-inter text-sm px-4 py-2 rounded-lg hover:bg-[#3d5f8f] transition-colors"
-          >
-            Estudiar
-          </Link>
-        )}
+      {!sesion.completada && (
+        <Link
+          href="/estudio"
+          className="inline-block w-full md:w-auto text-center bg-[#4A6FA5] text-white font-inter text-sm px-5 py-2.5 rounded-lg hover:bg-[#3d5f8f] transition-colors"
+        >
+          Ir al estudio
+        </Link>
+      )}
 
-        {sesion.completada && (
-          <span className="shrink-0 bg-[#FAF8F5] border border-[#E8E4DF] text-[#8A8A8A] font-inter text-xs px-3 py-1.5 rounded-lg">
-            ✓ Completada
-          </span>
-        )}
-      </div>
+      {sesion.completada && (
+        <span className="inline-block bg-[#FAF8F5] border border-[#E8E4DF] text-[#8A8A8A] font-inter text-xs px-3 py-1.5 rounded-lg">
+          ✓ Completada
+        </span>
+      )}
     </div>
   );
 }
@@ -180,24 +158,17 @@ function ProgresoCard({
   planNombre: string;
 }) {
   return (
-    <div className="border border-[#E8E4DF] rounded-xl p-6">
+    <div className="border border-[#E8E4DF] rounded-xl p-5 md:p-6">
       <div className="flex items-center justify-between mb-4">
-        <p className="font-inter text-xs text-[#8A8A8A] uppercase tracking-wide">
-          Progreso · {planNombre}
-        </p>
-        <p className="font-inter text-sm font-medium text-[#4A6FA5]">
-          {progreso.porcentaje}%
-        </p>
+        <p className="font-inter text-xs text-[#8A8A8A] uppercase tracking-wide">{planNombre}</p>
+        <p className="font-inter text-sm font-medium text-[#4A6FA5]">{progreso.porcentaje}%</p>
       </div>
-
-      {/* Barra */}
       <div className="h-1.5 bg-[#E8E4DF] rounded-full overflow-hidden mb-3">
         <div
           className="h-full bg-[#4A6FA5] rounded-full transition-all"
           style={{ width: `${progreso.porcentaje}%` }}
         />
       </div>
-
       <p className="font-inter text-sm text-[#8A8A8A]">
         {progreso.completadas} de {progreso.total} sesiones completadas
       </p>
@@ -207,23 +178,20 @@ function ProgresoCard({
 
 function TareasCard({ tareas }: { tareas: Tarea[] }) {
   return (
-    <div className="border border-[#E8E4DF] rounded-xl p-6">
+    <div className="border border-[#E8E4DF] rounded-xl p-5 md:p-6">
       <div className="flex items-center justify-between mb-4">
-        <p className="font-inter text-xs text-[#8A8A8A] uppercase tracking-wide">
-          Tareas pendientes
-        </p>
+        <p className="font-inter text-xs text-[#8A8A8A] uppercase tracking-wide">Tareas pendientes</p>
         <span className="font-inter text-xs bg-[#FAF8F5] border border-[#E8E4DF] text-[#8A8A8A] px-2 py-0.5 rounded-full">
           {tareas.length}
         </span>
       </div>
-
       <ul className="space-y-3">
         {tareas.map((t) => (
           <li key={t.id} className="flex items-start gap-3">
-            <span className="mt-0.5 w-1.5 h-1.5 rounded-full bg-[#4A6FA5] shrink-0" />
+            <span className="mt-1.5 w-1.5 h-1.5 rounded-full bg-[#4A6FA5] shrink-0" />
             <div>
               <p className="font-inter text-sm text-[#2C2C2C]">{t.descripcion}</p>
-              <p className="font-inter text-xs text-[#8A8A8A] mt-0.5 capitalize">
+              <p className="font-inter text-xs text-[#8A8A8A] mt-0.5">
                 {t.origen === "llama" ? "Generada por IA" : "Creada por ti"}
               </p>
             </div>
@@ -236,14 +204,14 @@ function TareasCard({ tareas }: { tareas: Tarea[] }) {
 
 function LoadingSkeleton() {
   return (
-    <main className="max-w-4xl mx-auto px-6 py-12">
-      <div className="mb-10">
+    <main className="max-w-4xl mx-auto px-4 md:px-6 py-8 md:py-12">
+      <div className="mb-8">
         <div className="h-3 w-32 bg-[#E8E4DF] rounded mb-2 animate-pulse" />
         <div className="h-8 w-48 bg-[#E8E4DF] rounded animate-pulse" />
       </div>
-      <div className="space-y-6">
+      <div className="space-y-4">
         {[1, 2, 3].map((i) => (
-          <div key={i} className="border border-[#E8E4DF] rounded-xl p-6">
+          <div key={i} className="border border-[#E8E4DF] rounded-xl p-5">
             <div className="h-3 w-24 bg-[#E8E4DF] rounded mb-3 animate-pulse" />
             <div className="h-5 w-56 bg-[#E8E4DF] rounded animate-pulse" />
           </div>
@@ -255,7 +223,7 @@ function LoadingSkeleton() {
 
 function ErrorMsg({ msg }: { msg: string }) {
   return (
-    <main className="max-w-4xl mx-auto px-6 py-12">
+    <main className="max-w-4xl mx-auto px-4 md:px-6 py-8 md:py-12">
       <p className="font-inter text-sm text-red-500">{msg}</p>
     </main>
   );
