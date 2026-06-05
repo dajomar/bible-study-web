@@ -26,11 +26,18 @@ interface Tarea {
   created_at: string;
 }
 
+interface OtroPlan {
+  id: number;
+  nombre: string;
+  progreso: { total: number; completadas: number; porcentaje: number };
+}
+
 interface DashboardData {
   plan: { id: number; nombre: string } | null;
   sesionHoy: SesionHoy | null;
   progreso: { total: number; completadas: number; porcentaje: number } | null;
   tareasHoy: Tarea[];
+  otrosPlanes: OtroPlan[];
 }
 
 function referenciaBiblica(sesion: SesionHoy): string {
@@ -86,13 +93,14 @@ export default function DashboardPage() {
         <h1 className="font-lora text-2xl md:text-3xl text-[#2C2C2C]">{saludo()}</h1>
       </div>
 
-      {!data.plan && <SinPlan />}
+      {!data.plan && <SinPlan tienePlanes={data.otrosPlanes.length > 0} />}
 
       {data.plan && (
         <div className="space-y-4 md:space-y-5">
           <SesionCard sesion={data.sesionHoy} planNombre={data.plan.nombre} />
           {data.progreso && <ProgresoCard progreso={data.progreso} planNombre={data.plan.nombre} />}
           {data.tareasHoy.length > 0 && <TareasCard tareas={data.tareasHoy} />}
+          {data.otrosPlanes.length > 0 && <OtrosPlanesCard planes={data.otrosPlanes} />}
         </div>
       )}
     </main>
@@ -101,18 +109,20 @@ export default function DashboardPage() {
 
 /* ── Sin plan ───────────────────────────────────────────────── */
 
-function SinPlan() {
+function SinPlan({ tienePlanes }: { tienePlanes: boolean }) {
   return (
     <div className="border border-[#E8E4DF] rounded-xl p-8 md:p-10 text-center">
       <p className="font-lora text-xl text-[#2C2C2C] mb-2">No tienes un plan activo</p>
       <p className="font-inter text-sm text-[#8A8A8A] mb-6 max-w-xs mx-auto">
-        Crea un plan de lectura para comenzar tu estudio bíblico.
+        {tienePlanes
+          ? "Tienes planes archivados. Activa uno para continuar tu estudio."
+          : "Crea un plan de lectura para comenzar tu estudio bíblico."}
       </p>
       <Link
         href="/plan"
         className="inline-block bg-[#4A6FA5] text-white font-inter text-sm px-6 py-3 rounded-lg hover:bg-[#3d5f8f] transition-colors"
       >
-        Crear plan
+        {tienePlanes ? "Ir a mis planes" : "Crear plan"}
       </Link>
     </div>
   );
@@ -238,6 +248,36 @@ function TareasCard({ tareas }: { tareas: Tarea[] }) {
           </li>
         ))}
       </ul>
+    </div>
+  );
+}
+
+/* ── Otros planes ───────────────────────────────────────────── */
+
+function OtrosPlanesCard({ planes }: { planes: OtroPlan[] }) {
+  return (
+    <div className="border border-[#E8E4DF] rounded-xl p-5 md:p-6">
+      <div className="flex items-center justify-between mb-4">
+        <p className="font-inter text-xs text-[#8A8A8A] uppercase tracking-wide">Otros planes</p>
+        <Link href="/plan" className="font-inter text-xs text-[#4A6FA5] hover:text-[#3d5f8f] transition-colors">
+          Gestionar →
+        </Link>
+      </div>
+      <div className="space-y-4">
+        {planes.map((p) => (
+          <div key={p.id}>
+            <div className="flex items-center justify-between mb-1.5">
+              <span className="font-inter text-sm text-[#2C2C2C]">{p.nombre}</span>
+              <span className="font-inter text-xs text-[#8A8A8A]">
+                {p.progreso.completadas}/{p.progreso.total} · {p.progreso.porcentaje}%
+              </span>
+            </div>
+            <div className="h-1 bg-[#E8E4DF] rounded-full overflow-hidden">
+              <div className="h-full bg-[#E8E4DF] rounded-full" style={{ width: `${p.progreso.porcentaje}%`, backgroundColor: "#CBD5E1" }} />
+            </div>
+          </div>
+        ))}
+      </div>
     </div>
   );
 }

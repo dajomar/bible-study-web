@@ -3,23 +3,46 @@ import { createAuthClient } from "@/lib/supabase-auth";
 import { supabase } from "@/lib/supabase";
 
 export async function GET() {
-  // 1. Usuario autenticado
   const authClient = createAuthClient();
   const { data: { user } } = await authClient.auth.getUser();
+  if (!user) return NextResponse.json({ error: "No autenticado" }, { status: 401 });
 
-  if (!user) {
-    return NextResponse.json({ error: "No autenticado" }, { status: 401 });
-  }
+  const hoy = new Date().toISOString().split("T")[0];
 
-  const hoy = new Date().toISOString().split("T")[0]; // "YYYY-MM-DD"
-
-  // 2. Plan activo del usuario
+  // Plan activo
   const { data: plan } = await supabase
     .from("bible_planes")
-    .select("id, nombre, descripcion")
+    .select("id, nombre")
     .eq("id_usuario", user.id)
     .eq("activo", true)
-    .single();
+    .maybeSingle();
+
+  // Otros planes (inactivos/archivados)
+  const { data: otrosPlanesRaw } = await supabase
+    .from("bible_planes")
+    .select("id, nombre")
+    .eq("id_usuario", user.id)
+    .eq("activo", false)
+    .order("created_at", { ascending: false });
+
+  // Progreso de cada plan inactivo (en paralelo)
+  const otrosPlanes = await Promise.all(
+    (otrosPlanesRaw ?? []).map(async (p) => {
+      const [{ count: total }, { count: completadas }] = await Promise.all([
+        supabase.from("bible_sesiones").select("id", { count: "exact", head: true }).eq("id_plan", p.id),
+        supabase.from("bible_sesiones").select("id", { count: "exact", head: true }).eq("id_plan", p.id).eq("completada", true),
+      ]);
+      return {
+        id: p.id,
+        nombre: p.nombre,
+        progreso: {
+          total: total ?? 0,
+          completadas: completadas ?? 0,
+          porcentaje: total ? Math.round(((completadas ?? 0) / total) * 100) : 0,
+        },
+      };
+    })
+  );
 
   if (!plan) {
     return NextResponse.json({
@@ -27,46 +50,35 @@ export async function GET() {
       sesionHoy: null,
       progreso: null,
       tareasHoy: [],
+      otrosPlanes,
     });
   }
 
-  // 3. Sesión programada para hoy
+  // Sesión programada para hoy
   const { data: sesionHoy } = await supabase
     .from("bible_sesiones")
     .select(`
       id, orden, completada, fecha_programada,
       inicio:versiculo_inicio_id (
         numero,
-        capitulo:id_capitulo (
-          numero,
-          libro:id_libro ( nombre, abreviatura )
-        )
+        capitulo:id_capitulo ( numero, libro:id_libro ( nombre, abreviatura ) )
       ),
       fin:versiculo_fin_id (
         numero,
-        capitulo:id_capitulo (
-          numero,
-          libro:id_libro ( nombre, abreviatura )
-        )
+        capitulo:id_capitulo ( numero, libro:id_libro ( nombre, abreviatura ) )
       )
     `)
     .eq("id_plan", plan.id)
     .eq("fecha_programada", hoy)
-    .single();
+    .maybeSingle();
 
-  // 4. Progreso del plan (total y completadas)
-  const { count: total } = await supabase
-    .from("bible_sesiones")
-    .select("id", { count: "exact", head: true })
-    .eq("id_plan", plan.id);
+  // Progreso del plan activo
+  const [{ count: total }, { count: completadas }] = await Promise.all([
+    supabase.from("bible_sesiones").select("id", { count: "exact", head: true }).eq("id_plan", plan.id),
+    supabase.from("bible_sesiones").select("id", { count: "exact", head: true }).eq("id_plan", plan.id).eq("completada", true),
+  ]);
 
-  const { count: completadas } = await supabase
-    .from("bible_sesiones")
-    .select("id", { count: "exact", head: true })
-    .eq("id_plan", plan.id)
-    .eq("completada", true);
-
-  // 5. Tareas pendientes del usuario (las 3 más recientes)
+  // Tareas pendientes (3 más recientes)
   const { data: tareas } = await supabase
     .from("bible_tareas")
     .select("id, descripcion, origen, created_at")
@@ -84,5 +96,6 @@ export async function GET() {
       porcentaje: total ? Math.round(((completadas ?? 0) / total) * 100) : 0,
     },
     tareasHoy: tareas ?? [],
+    otrosPlanes,
   });
 }

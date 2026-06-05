@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import apiClient from "@/lib/axios";
 import { useResaltados } from "@/hooks/useResaltados";
@@ -52,6 +53,7 @@ interface EstudioData {
   versiculos: Versiculo[];
   secciones: Seccion[];
   analisis: Analisis | null;
+  sinPlan?: boolean;
 }
 
 function buildReferencia(sesion: Sesion): string {
@@ -152,7 +154,7 @@ export default function EstudioPage() {
 
   if (loading) return <LoadingSkeleton />;
   if (error) return <ErrorMsg msg={error} />;
-  if (!data?.sesion) return <SinSesion />;
+  if (!data?.sesion) return <SinSesion sinPlan={data?.sinPlan ?? false} />;
 
   const { sesion, versiculos, secciones, analisis } = data;
   const referencia = buildReferencia(sesion);
@@ -402,14 +404,24 @@ function SinAnalisis() {
   );
 }
 
-function SinSesion() {
+function SinSesion({ sinPlan }: { sinPlan: boolean }) {
   return (
     <main className="max-w-3xl mx-auto px-4 md:px-6 py-8 md:py-12">
       <div className="border border-[#E8E4DF] rounded-xl p-6 md:p-8 text-center">
-        <p className="font-lora text-xl text-[#2C2C2C] mb-2">No hay sesiones pendientes</p>
-        <p className="font-inter text-sm text-[#8A8A8A]">
-          Has completado todas las sesiones del plan activo, o aún no tienes un plan.
+        <p className="font-lora text-xl text-[#2C2C2C] mb-2">
+          {sinPlan ? "No tienes un plan activo" : "Plan al día"}
         </p>
+        <p className="font-inter text-sm text-[#8A8A8A] mb-5">
+          {sinPlan
+            ? "Activa un plan desde tu lista de planes para comenzar a estudiar."
+            : "Has completado todas las sesiones pendientes del plan activo. ¡Buen trabajo!"}
+        </p>
+        <Link
+          href="/plan"
+          className="inline-block bg-[#4A6FA5] text-white font-inter text-sm px-5 py-2.5 rounded-lg hover:bg-[#3d5f8f] transition-colors"
+        >
+          {sinPlan ? "Ir a mis planes" : "Ver planes"}
+        </Link>
       </div>
     </main>
   );

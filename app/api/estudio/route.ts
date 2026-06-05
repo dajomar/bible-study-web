@@ -19,7 +19,7 @@ export async function GET() {
     .single();
 
   if (!plan) {
-    return NextResponse.json({ sesion: null, versiculos: [], analisis: null });
+    return NextResponse.json({ sesion: null, versiculos: [], secciones: [], analisis: null, sinPlan: true });
   }
 
   // Sesión activa: la primera no completada del plan
@@ -37,7 +37,7 @@ export async function GET() {
     .single();
 
   if (!sesion) {
-    return NextResponse.json({ sesion: null, versiculos: [], analisis: null });
+    return NextResponse.json({ sesion: null, versiculos: [], secciones: [], analisis: null, sinPlan: false });
   }
 
   // Versículos del rango: mismo capítulo o capítulos distintos
