@@ -14,6 +14,15 @@ Proyecto hermano: `bible-study-agents` (agentes Python que analizan con Llama 3.
 
 ---
 
+## Deploy
+
+- **Producción:** https://bible-study-web-mocha.vercel.app
+- **Repo:** https://github.com/dajomar/bible-study-web
+- **CI/CD:** cada `git push origin main` despliega automáticamente en Vercel
+- **Variables de entorno en Vercel:** `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`, `NEXT_PUBLIC_API_BASE_URL`
+
+---
+
 ## Stack
 
 | Componente        | Tecnología                              |
@@ -80,55 +89,73 @@ Bordes:            #E8E4DF  (gris crema)
 ```
 bible-study-web/
 ├── app/
-│   ├── layout.tsx                  # Layout raíz con fuentes y nav
-│   ├── page.tsx                    # Dashboard / overview (ruta /)
+│   ├── layout.tsx                       # Layout raíz con fuentes y nav
+│   ├── page.tsx                         # Dashboard / overview (ruta /)
 │   ├── login/
-│   │   └── page.tsx                # Login / registro
+│   │   └── page.tsx                     # Login / registro
 │   ├── estudio/
-│   │   └── page.tsx                # Estudio del día (texto + análisis)
+│   │   └── page.tsx                     # Estudio del día (texto + análisis)
 │   ├── biblia/
-│   │   └── page.tsx                # Lector de Biblia (buscar por libro)
+│   │   └── page.tsx                     # Lector de Biblia (buscar por libro)
 │   ├── analisis/
-│   │   └── page.tsx                # Análisis libre (fuera del plan)
+│   │   └── page.tsx                     # Historial de análisis con texto bíblico inline
 │   ├── plan/
-│   │   └── page.tsx                # Gestión del plan de estudios
+│   │   └── page.tsx                     # Gestión del plan de estudios
 │   ├── configuracion/
-│   │   └── page.tsx                # Configuración de usuario
-│   └── api/                        # Route Handlers — backend interno
+│   │   └── page.tsx                     # Perfil, cambio de contraseña, zona de peligro
+│   └── api/                             # Route Handlers — backend interno
 │       ├── auth/
-│       │   ├── login/route.ts      # POST — inicia sesión
-│       │   ├── registro/route.ts   # POST — crea usuario
-│       │   └── logout/route.ts     # POST — cierra sesión
-│       ├── dashboard/route.ts      # GET — resumen del día
-│       ├── estudio/route.ts        # GET — sesión activa + versículos + análisis
-│       ├── biblia/route.ts         # GET — versículos por libro/capítulo
-│       ├── analisis/route.ts       # GET/POST — análisis libres
-│       ├── plan/route.ts           # GET/POST/PUT — planes y sesiones
-│       └── usuario/route.ts        # GET/PUT — perfil del usuario
+│       │   ├── login/route.ts           # POST — inicia sesión
+│       │   ├── registro/route.ts        # POST — crea usuario (admin.createUser, sin email)
+│       │   ├── logout/route.ts          # POST — cierra sesión
+│       │   └── cambiar-password/route.ts# POST — verifica pass actual, actualiza con admin API
+│       ├── dashboard/route.ts           # GET — sesión del día, progreso, tareas pendientes
+│       ├── estudio/
+│       │   ├── route.ts                 # GET — sesión activa + versículos + análisis
+│       │   └── completar/route.ts       # POST — marca sesión completada con timestamp
+│       ├── biblia/
+│       │   ├── libros/route.ts          # GET — 66 libros ordenados por testamento
+│       │   └── route.ts                 # GET — capítulos (libro_id) o versículos (libro_id + capitulo)
+│       ├── analisis/route.ts            # GET — historial de análisis del usuario
+│       ├── plan/
+│       │   ├── route.ts                 # GET — todos los planes + sesiones del activo; POST — crear plan
+│       │   └── [id]/route.ts            # PUT — activar/desactivar plan
+│       ├── sesion/
+│       │   └── [id]/versiculos/route.ts # GET — versículos de una sesión (mismo/distinto capítulo)
+│       └── usuario/route.ts             # GET — perfil + stats; PUT — nombre; DELETE — eliminar cuenta
 ├── components/
-│   ├── ui/                         # Button, Card, Badge, Input, Nav
-│   └── [feature]/                  # Componentes por sección
+│   └── ui/
+│       ├── Nav.tsx                      # Nav responsiva: hamburger móvil, horizontal desktop
+│       └── NavWrapper.tsx              # Oculta Nav en /login
 ├── lib/
-│   ├── supabase.ts                 # Cliente con service role — SERVER ONLY
-│   ├── supabase-auth.ts            # Cliente SSR para auth (cookies) — SERVER ONLY
-│   ├── axios.ts                    # Instancia de Axios con baseURL configurada
-│   └── utils.ts                    # Helpers generales
-├── middleware.ts                   # Protege rutas autenticadas
+│   ├── supabase.ts                      # Cliente admin con service role — SERVER ONLY
+│   ├── supabase-auth.ts                 # Cliente SSR con cookies — SERVER ONLY
+│   ├── axios.ts                         # Instancia Axios con NEXT_PUBLIC_API_BASE_URL
+│   └── utils.ts                         # Helpers generales
+├── middleware.ts                        # Protege rutas; PUBLIC_PATHS = ["/login", "/api/auth"]
 ├── types/
-│   └── index.ts                    # Tipos TypeScript de todas las entidades
-├── database/                       # Scripts SQL — fuente de verdad del esquema
+│   └── index.ts                         # Tipos TypeScript de todas las entidades
+├── database/                            # Scripts SQL — fuente de verdad del esquema
 ├── CLAUDE.md
 └── .env.local
 ```
 
 ---
 
-## Variables de entorno (.env.local)
+## Variables de entorno
 
+**Desarrollo (`.env.local`):**
 ```
 SUPABASE_URL=                       # URL del proyecto Supabase
 SUPABASE_SERVICE_ROLE_KEY=          # NUNCA en NEXT_PUBLIC_
 NEXT_PUBLIC_API_BASE_URL=http://localhost:3000
+```
+
+**Producción (Vercel dashboard / CLI):**
+```
+SUPABASE_URL=                       # igual que local
+SUPABASE_SERVICE_ROLE_KEY=          # igual que local
+NEXT_PUBLIC_API_BASE_URL=https://bible-study-web-mocha.vercel.app
 ```
 
 ---
@@ -159,58 +186,41 @@ bible_tareas      → id, id_sesion, id_analisis, id_usuario,
 - `temas_principales` y `preguntas_reflexion` son `TEXT` (no arrays) — el agente escribe texto libre
 - `bible_usuarios.id` debe coincidir con el UID de Supabase Auth para vincular auth ↔ datos
 - `bible_tareas.origen` tiene CHECK constraint: solo `'llama'` o `'usuario'`
+- CASCADE DELETE en `bible_usuarios` elimina planes, sesiones, análisis y tareas en cadena
 
 ---
 
-## Plan de desarrollo — orden y estado
+## Decisiones técnicas relevantes
 
-### Fase 0 — Autenticación ✅ PRIORITARIA
-**Por qué primero:** todo lo demás depende del usuario autenticado.
+- **`auth.admin.createUser({ email_confirm: true })`** en registro — evita envío de email y rate limits de Supabase
+- **Middleware `PUBLIC_PATHS`** incluye tanto `"/login"` como `"/api/auth"` — sin esto las rutas de auth quedan bloqueadas
+- **Verso range en sesiones:** mismo capítulo → rango por `numero` (gte/lte); distinto capítulo → rango por `id` (gte/lte)
+- **Stats en `/api/usuario`:** Supabase JS no soporta subqueries en `.in()` — se hace en 3 queries secuenciales (plan IDs → sesion IDs → count analisis)
+- **Versículos en `/analisis`** se cargan de forma lazy al expandir cada card, cacheados en `versiculosMap` por `sesion.id`
+- **Nav responsiva:** hamburger animado en móvil, links horizontales en desktop; se oculta completamente en `/login` vía `NavWrapper`
 
-- [ ] Instalar `@supabase/ssr`
-- [ ] Crear `lib/supabase-auth.ts` — cliente SSR con cookies
-- [ ] Crear `middleware.ts` — redirige a `/login` si no hay sesión
-- [ ] Route Handlers: `POST /api/auth/login`, `POST /api/auth/registro`, `POST /api/auth/logout`
-- [ ] Al registrarse: crear fila en `bible_usuarios` con el mismo UUID de Supabase Auth
-- [ ] Página `/login` — formulario email/password, Client Component con Axios
+---
 
-### Fase 1 — Layout y navegación compartida ✅ COMPLETADA
-- [x] Componente `Nav` — enlaces a las 6 secciones, indicador de sección activa
-- [x] `app/layout.tsx` — integrar Nav
-- [x] Fuentes Lora + Inter configuradas
+## Estado del proyecto — COMPLETADO ✅
 
-### Fase 2 — Dashboard (`/`) ✅ COMPLETADA
-- [x] `GET /api/dashboard` → sesión del día, progreso del plan, últimas 3 tareas pendientes
-- [x] UI: card "Sesión de hoy" con referencia bíblica, card "Progreso" con barra, lista de tareas
-- [x] Estado vacío cuando no hay plan activo
-- [x] Skeleton de carga
+Todas las fases implementadas y desplegadas en producción:
 
-### Fase 3 — Estudio del día (`/estudio`) ✅ COMPLETADA
-- [x] `GET /api/estudio` → sesión activa + rango de versículos + análisis si existe
-- [x] `POST /api/estudio/completar` → marca sesión como completada con timestamp
-- [x] UI: versículos en Lora con número en superíndice, análisis en 5 secciones, botón completar
+| Fase | Sección            | Estado |
+|------|--------------------|--------|
+| 0    | Autenticación      | ✅     |
+| 1    | Layout y Nav       | ✅     |
+| 2    | Dashboard (`/`)    | ✅     |
+| 3    | Estudio (`/estudio`)| ✅    |
+| 4    | Biblia (`/biblia`) | ✅     |
+| 5    | Análisis (`/analisis`) | ✅ |
+| 6    | Plan (`/plan`)     | ✅     |
+| 7    | Configuración (`/configuracion`) | ✅ |
 
-### Fase 4 — Lector Biblia (`/biblia`) ✅ COMPLETADA
-- [x] `GET /api/biblia/libros` → 66 libros agrupados por testamento
-- [x] `GET /api/biblia?libro_id=` → capítulos del libro
-- [x] `GET /api/biblia?libro_id=&capitulo=` → versículos del capítulo
-- [x] UI: selectores en cascada (libro → capítulo → versículos en Lora), optgroup AT/NT
-
-### Fase 5 — Análisis (`/analisis`) ✅ COMPLETADA
-- [x] `GET /api/analisis` → historial de análisis de todas las sesiones del usuario
-- [x] UI: lista de cards con referencia bíblica + resumen truncado, expandibles inline con las 5 secciones
-- Nota: generación por Llama es responsabilidad del agente Python externo — la web solo muestra resultados
-
-### Fase 6 — Plan (`/plan`) ✅ COMPLETADA
-- [x] `GET /api/plan` → todos los planes con progreso + sesiones del plan activo con refs bíblicas
-- [x] `POST /api/plan` → crea plan y lo activa (desactiva los demás)
-- [x] `PUT /api/plan/[id]` → activa/desactiva un plan
-- [x] UI: plan activo con barra de progreso y lista de sesiones, otros planes con botón activar, formulario inline
-
-### Fase 7 — Configuración (`/configuracion`) ✅ COMPLETADA
-- [x] `GET /api/usuario` → perfil + stats (planes, sesiones completadas, análisis)
-- [x] `PUT /api/usuario` → actualiza nombre
-- [x] UI: stats en 3 cards, formulario con email (solo lectura) y nombre editable
+Extras implementados sobre el plan original:
+- Cambio de contraseña con verificación de contraseña actual
+- Zona de peligro (eliminar cuenta con confirmación por texto)
+- Diseño completamente responsive (móvil + desktop)
+- Texto bíblico inline en `/analisis` con carga lazy por sesión
 
 ---
 
