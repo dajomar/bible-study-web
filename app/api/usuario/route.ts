@@ -76,3 +76,26 @@ export async function PUT(request: NextRequest) {
 
   return NextResponse.json({ usuario: data });
 }
+
+export async function DELETE() {
+  const authClient = createAuthClient();
+  const { data: { user } } = await authClient.auth.getUser();
+  if (!user) return NextResponse.json({ error: "No autenticado" }, { status: 401 });
+
+  // Eliminar fila en bible_usuarios (CASCADE elimina planes, sesiones, análisis, tareas)
+  const { error: dbError } = await supabase
+    .from("bible_usuarios")
+    .delete()
+    .eq("id", user.id);
+
+  if (dbError) return NextResponse.json({ error: dbError.message }, { status: 500 });
+
+  // Eliminar usuario de Supabase Auth
+  const { error: authError } = await supabase.auth.admin.deleteUser(user.id);
+  if (authError) return NextResponse.json({ error: authError.message }, { status: 500 });
+
+  // Cerrar sesión
+  await authClient.auth.signOut();
+
+  return NextResponse.json({ ok: true });
+}
