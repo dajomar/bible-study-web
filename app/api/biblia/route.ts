@@ -1,12 +1,39 @@
 import { NextRequest, NextResponse } from "next/server";
+import { createAuthClient } from "@/lib/supabase-auth";
 import { supabase } from "@/lib/supabase";
 
 export async function GET(request: NextRequest) {
+  const authClient = createAuthClient();
+  const { data: { user } } = await authClient.auth.getUser();
+  if (!user) return NextResponse.json({ error: "No autenticado" }, { status: 401 });
+
+  const { data: usuario } = await supabase
+    .from("bible_usuarios")
+    .select("version_biblica")
+    .eq("id", user.id)
+    .single();
+
+  const version = usuario?.version_biblica ?? "RVR1960";
+
   const { searchParams } = request.nextUrl;
   const libroId = searchParams.get("libro_id");
   const capituloNum = searchParams.get("capitulo");
 
-  // Sin parámetros → devolver lista de capítulos del libro
+  // Verificar que el libro pertenece a la versión del usuario
+  if (libroId) {
+    const { data: libro } = await supabase
+      .from("bible_libros")
+      .select("id, version")
+      .eq("id", libroId)
+      .eq("version", version)
+      .single();
+
+    if (!libro) {
+      return NextResponse.json({ error: "Libro no encontrado en esta versión" }, { status: 404 });
+    }
+  }
+
+  // Capítulos del libro
   if (libroId && !capituloNum) {
     const { data, error } = await supabase
       .from("bible_capitulos")
@@ -14,16 +41,12 @@ export async function GET(request: NextRequest) {
       .eq("id_libro", libroId)
       .order("numero", { ascending: true });
 
-    if (error) {
-      return NextResponse.json({ error: error.message }, { status: 500 });
-    }
-
+    if (error) return NextResponse.json({ error: error.message }, { status: 500 });
     return NextResponse.json({ capitulos: data });
   }
 
-  // Con libro y capítulo → devolver versículos
+  // Versículos del capítulo
   if (libroId && capituloNum) {
-    // Buscar el id del capítulo
     const { data: capitulo, error: capError } = await supabase
       .from("bible_capitulos")
       .select("id, numero")
@@ -41,15 +64,9 @@ export async function GET(request: NextRequest) {
       .eq("id_capitulo", capitulo.id)
       .order("numero", { ascending: true });
 
-    if (verError) {
-      return NextResponse.json({ error: verError.message }, { status: 500 });
-    }
-
+    if (verError) return NextResponse.json({ error: verError.message }, { status: 500 });
     return NextResponse.json({ capitulo, versiculos });
   }
 
-  return NextResponse.json(
-    { error: "Parámetro libro_id requerido" },
-    { status: 400 }
-  );
+  return NextResponse.json({ error: "Parámetro libro_id requerido" }, { status: 400 });
 }

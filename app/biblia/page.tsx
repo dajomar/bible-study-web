@@ -82,6 +82,7 @@ export default function BibliaPage() {
   const [loadingCaps, setLoadingCaps] = useState(false);
   const [loadingVers, setLoadingVers] = useState(false);
 
+  const [version, setVersion] = useState<string>("");
   const [tamano, setTamano] = useState(1);
   const [copiado, setCopiado] = useState<number | null>(null);
 
@@ -106,8 +107,11 @@ export default function BibliaPage() {
 
   useEffect(() => {
     apiClient
-      .get<{ libros: Libro[] }>("/api/biblia/libros")
-      .then((res) => setLibros(res.data.libros))
+      .get<{ libros: Libro[]; version: string }>("/api/biblia/libros")
+      .then((res) => {
+        setLibros(res.data.libros);
+        setVersion(res.data.version);
+      })
       .finally(() => setLoadingLibros(false));
   }, []);
 
@@ -274,7 +278,14 @@ export default function BibliaPage() {
     <main className="max-w-3xl mx-auto px-4 md:px-6 py-8 md:py-12">
       <div className="mb-8 md:mb-10">
         <h1 className="font-lora text-2xl md:text-3xl text-[#2C2C2C]">Biblia</h1>
-        <p className="font-inter text-sm text-[#8A8A8A] mt-1">Reina Valera</p>
+        <div className="flex items-center gap-2 mt-1">
+          <p className="font-inter text-sm text-[#8A8A8A]">Lector bíblico</p>
+          {version && (
+            <span className="font-inter text-xs text-[#8A8A8A] bg-[#FAF8F5] border border-[#E8E4DF] px-2 py-0.5 rounded-full">
+              {version}
+            </span>
+          )}
+        </div>
       </div>
 
       {/* ── Tabs de modo ── */}
