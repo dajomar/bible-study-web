@@ -7,15 +7,21 @@ export async function GET(request: NextRequest) {
   const { data: { user } } = await authClient.auth.getUser();
   if (!user) return NextResponse.json({ error: "No autenticado" }, { status: 401 });
 
-  const { data: usuario } = await supabase
-    .from("bible_usuarios")
-    .select("version_biblica")
-    .eq("id", user.id)
-    .single();
-
-  const version = usuario?.version_biblica ?? "RVR1960";
-
+  const VERSIONES_VALIDAS = ["RV1909", "RVR1960", "NVI", "TLA"];
   const { searchParams } = request.nextUrl;
+  const versionParam = searchParams.get("version");
+  let version: string;
+  if (versionParam && VERSIONES_VALIDAS.includes(versionParam)) {
+    version = versionParam;
+  } else {
+    const { data: usuario } = await supabase
+      .from("bible_usuarios")
+      .select("version_biblica")
+      .eq("id", user.id)
+      .single();
+    version = usuario?.version_biblica ?? "RVR1960";
+  }
+
   const libroId = searchParams.get("libro_id");
   const capituloNum = searchParams.get("capitulo");
 
