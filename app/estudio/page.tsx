@@ -39,9 +39,16 @@ interface Analisis {
   created_at: string;
 }
 
+interface Seccion {
+  versiculo_inicio: number;
+  titulo: string;
+  capitulo: number;
+}
+
 interface EstudioData {
   sesion: Sesion | null;
   versiculos: Versiculo[];
+  secciones: Seccion[];
   analisis: Analisis | null;
 }
 
@@ -114,7 +121,7 @@ export default function EstudioPage() {
   if (error) return <ErrorMsg msg={error} />;
   if (!data?.sesion) return <SinSesion />;
 
-  const { sesion, versiculos, analisis } = data;
+  const { sesion, versiculos, secciones, analisis } = data;
   const referencia = buildReferencia(sesion);
 
   return (
@@ -170,6 +177,9 @@ export default function EstudioPage() {
         <div className="space-y-0.5">
           {versiculos.map((v, i) => {
             const esNuevoCapitulo = i === 0 || v.id_capitulo !== versiculos[i - 1].id_capitulo;
+            const seccion = secciones.find(
+              (s) => s.capitulo === v.capitulo_numero && s.versiculo_inicio === v.numero
+            );
             return (
               <div key={v.id}>
                 {esNuevoCapitulo && (
@@ -180,6 +190,16 @@ export default function EstudioPage() {
                     </p>
                     <div className="flex-1 h-px bg-[#E8E4DF]" />
                   </div>
+                )}
+                {seccion && !esNuevoCapitulo && (
+                  <p className="font-inter text-xs font-medium text-[#4A6FA5] uppercase tracking-widest mt-6 mb-2 px-2 -mx-2">
+                    {seccion.titulo}
+                  </p>
+                )}
+                {seccion && esNuevoCapitulo && (
+                  <p className="font-inter text-xs font-medium text-[#4A6FA5] uppercase tracking-widest mb-2 px-2 -mx-2">
+                    {seccion.titulo}
+                  </p>
                 )}
                 <p
                   onClick={() => copiarVersiculo(v, referencia)}

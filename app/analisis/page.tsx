@@ -36,6 +36,12 @@ interface Versiculo {
   capitulo_numero: number;
 }
 
+interface Seccion {
+  versiculo_inicio: number;
+  titulo: string;
+  capitulo: number;
+}
+
 const FONT_SIZES = [
   "text-sm leading-7",
   "text-base leading-8",
@@ -66,6 +72,7 @@ export default function AnalisisPage() {
   const [loading, setLoading] = useState(true);
   const [abierto, setAbierto] = useState<number | null>(null);
   const [versiculosMap, setVersiculosMap] = useState<Record<number, Versiculo[]>>({});
+  const [seccionesMap, setSeccionesMap] = useState<Record<number, Seccion[]>>({});
   const [loadingVers, setLoadingVers] = useState<number | null>(null);
   const [tamano, setTamano] = useState(1);
   const [copiado, setCopiad] = useState<number | null>(null);
@@ -84,10 +91,11 @@ export default function AnalisisPage() {
     if (!versiculosMap[sesion.id]) {
       setLoadingVers(id);
       try {
-        const res = await apiClient.get<{ versiculos: Versiculo[] }>(
+        const res = await apiClient.get<{ versiculos: Versiculo[]; secciones: Seccion[] }>(
           `/api/sesion/${sesion.id}/versiculos`
         );
         setVersiculosMap((prev) => ({ ...prev, [sesion.id]: res.data.versiculos }));
+        setSeccionesMap((prev) => ({ ...prev, [sesion.id]: res.data.secciones ?? [] }));
       } finally {
         setLoadingVers(null);
       }
@@ -142,6 +150,7 @@ export default function AnalisisPage() {
             const referencia = buildReferencia(a.sesion);
             const expandido = abierto === a.id;
             const versiculos = versiculosMap[a.sesion.id] ?? [];
+            const secciones = seccionesMap[a.sesion.id] ?? [];
             const cargandoVers = loadingVers === a.id;
 
             return (
@@ -222,6 +231,9 @@ export default function AnalisisPage() {
                         <div className="space-y-0.5">
                           {versiculos.map((v, i) => {
                             const esNuevoCapitulo = i === 0 || v.id_capitulo !== versiculos[i - 1].id_capitulo;
+                            const seccion = secciones.find(
+                              (s) => s.capitulo === v.capitulo_numero && s.versiculo_inicio === v.numero
+                            );
                             return (
                               <div key={v.id}>
                                 {esNuevoCapitulo && (
@@ -232,6 +244,11 @@ export default function AnalisisPage() {
                                     </p>
                                     <div className="flex-1 h-px bg-[#E8E4DF]" />
                                   </div>
+                                )}
+                                {seccion && (
+                                  <p className={`font-inter text-xs font-medium text-[#4A6FA5] uppercase tracking-widest mb-2 px-2 -mx-2 ${esNuevoCapitulo ? "" : "mt-6"}`}>
+                                    {seccion.titulo}
+                                  </p>
                                 )}
                                 <p
                                   onClick={(e) => { e.stopPropagation(); copiarVersiculo(v, referencia); }}

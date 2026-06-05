@@ -99,17 +99,31 @@ export async function GET() {
     .single();
 
   // Info del libro/capítulo del versículo de inicio para el título
-  const { data: capInfo } = await supabase
-    .from("bible_capitulos")
-    .select("numero, libro:id_libro ( nombre, abreviatura )")
-    .eq("id", inicioCapitulo)
-    .single();
+  const [{ data: capInfo }, { data: capFinInfo }] = await Promise.all([
+    supabase
+      .from("bible_capitulos")
+      .select("numero, id_libro, libro:id_libro ( nombre, abreviatura )")
+      .eq("id", inicioCapitulo)
+      .single(),
+    supabase
+      .from("bible_capitulos")
+      .select("numero, libro:id_libro ( nombre, abreviatura )")
+      .eq("id", finCapitulo)
+      .single(),
+  ]);
 
-  const { data: capFinInfo } = await supabase
-    .from("bible_capitulos")
-    .select("numero, libro:id_libro ( nombre, abreviatura )")
-    .eq("id", finCapitulo)
-    .single();
+  // Secciones del rango (mismo libro, capítulos entre inicio y fin)
+  const capInfoTyped = capInfo as unknown as { numero: number; id_libro: number; libro: { nombre: string; abreviatura: string } };
+  const capFinTyped = capFinInfo as unknown as { numero: number; libro: { nombre: string; abreviatura: string } };
+
+  const { data: secciones } = await supabase
+    .from("bible_secciones")
+    .select("versiculo_inicio, titulo, capitulo")
+    .eq("id_libro", capInfoTyped.id_libro)
+    .gte("capitulo", capInfoTyped.numero)
+    .lte("capitulo", capFinTyped.numero)
+    .order("capitulo", { ascending: true })
+    .order("versiculo_inicio", { ascending: true });
 
   return NextResponse.json({
     sesion: {
@@ -123,6 +137,7 @@ export async function GET() {
       versiculoFinNum: fin.numero,
     },
     versiculos,
+    secciones: secciones ?? [],
     analisis: analisis ?? null,
   });
 }

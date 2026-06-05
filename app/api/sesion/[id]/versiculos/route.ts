@@ -69,5 +69,32 @@ export async function GET(
     }));
   }
 
-  return NextResponse.json({ versiculos });
+  // Obtener id_libro y rango de capítulos para bible_secciones
+  const { data: capInicioInfo } = await supabase
+    .from("bible_capitulos")
+    .select("numero, id_libro")
+    .eq("id", inicio.id_capitulo)
+    .single();
+
+  const { data: capFinInfo } = await supabase
+    .from("bible_capitulos")
+    .select("numero")
+    .eq("id", fin.id_capitulo)
+    .single();
+
+  let secciones: { versiculo_inicio: number; titulo: string; capitulo: number }[] = [];
+
+  if (capInicioInfo && capFinInfo) {
+    const { data } = await supabase
+      .from("bible_secciones")
+      .select("versiculo_inicio, titulo, capitulo")
+      .eq("id_libro", capInicioInfo.id_libro)
+      .gte("capitulo", capInicioInfo.numero)
+      .lte("capitulo", capFinInfo.numero)
+      .order("capitulo", { ascending: true })
+      .order("versiculo_inicio", { ascending: true });
+    secciones = data ?? [];
+  }
+
+  return NextResponse.json({ versiculos, secciones });
 }
