@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, useCallback, useRef, useMemo } from "react";
+import { useEffect, useRef, useState, useCallback, useMemo } from "react";
 import apiClient from "@/lib/axios";
 import { useResaltados } from "@/hooks/useResaltados";
 import { FloatingHighlightMenu, COLORES_RESALTADO } from "@/components/ui/FloatingHighlightMenu";
@@ -148,6 +148,7 @@ export default function BibliaPage() {
   const [modo, setModo] = useState<Modo>("referencia");
   const { resaltados, cargar, guardar, quitar } = useResaltados();
   const [menuState, setMenuState] = useState<{ versiculoId: number; rect: DOMRect } | null>(null);
+  const suppressCopyRef = useRef(false);
 
   // ── Estado: modo referencia ──
   const [inputRef, setInputRef] = useState("");
@@ -194,27 +195,30 @@ export default function BibliaPage() {
     }
   }, [versiculos, versiculoDestacado]);
 
-  // Detección de selección de texto para menú de resaltado
+  // Cierra el menú con scroll o clic fuera
   useEffect(() => {
-    function onSelectionChange() {
-      const sel = window.getSelection();
-      if (!sel || sel.isCollapsed || !sel.rangeCount) { setMenuState(null); return; }
-      const range = sel.getRangeAt(0);
-      const node = range.commonAncestorContainer;
-      const el = node.nodeType === Node.TEXT_NODE ? node.parentElement : (node as Element);
-      const verseEl = el?.closest("[data-versiculo-id]");
-      if (!verseEl) { setMenuState(null); return; }
-      const versiculoId = Number(verseEl.getAttribute("data-versiculo-id"));
-      setMenuState({ versiculoId, rect: range.getBoundingClientRect() });
-    }
     const onScroll = () => setMenuState(null);
-    document.addEventListener("selectionchange", onSelectionChange);
     window.addEventListener("scroll", onScroll, true);
-    return () => {
-      document.removeEventListener("selectionchange", onSelectionChange);
-      window.removeEventListener("scroll", onScroll, true);
-    };
+    return () => window.removeEventListener("scroll", onScroll, true);
   }, []);
+
+  useEffect(() => {
+    if (!menuState) return;
+    function onMouseDown(e: MouseEvent) {
+      if (!(e.target as Element).closest("[data-highlight-menu]")) setMenuState(null);
+    }
+    document.addEventListener("mousedown", onMouseDown);
+    return () => document.removeEventListener("mousedown", onMouseDown);
+  }, [menuState]);
+
+  function onVerseMouseUp(versiculoId: number) {
+    const sel = window.getSelection();
+    if (!sel || sel.isCollapsed || !sel.rangeCount) return;
+    const rect = sel.getRangeAt(0).getBoundingClientRect();
+    if (!rect.width && !rect.height) return;
+    suppressCopyRef.current = true;
+    setMenuState({ versiculoId, rect });
+  }
 
   // ── Cargar versículos ──
   const cargarVersiculos = useCallback(async (libroIdVal: string, capNum: string, ver?: string) => {
@@ -715,9 +719,9 @@ export default function BibliaPage() {
                     <p
                       data-versiculo-id={v.id}
                       ref={(el) => { versiculoRefs.current[v.numero] = el; }}
+                      onMouseUp={() => onVerseMouseUp(v.id)}
                       onClick={() => {
-                        const sel = window.getSelection();
-                        if (sel && !sel.isCollapsed) return;
+                        if (suppressCopyRef.current) { suppressCopyRef.current = false; return; }
                         copiarVersiculo(v);
                       }}
                       title="Clic para copiar · selecciona texto para resaltar"

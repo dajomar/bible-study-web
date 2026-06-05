@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import apiClient from "@/lib/axios";
 import { useResaltados } from "@/hooks/useResaltados";
@@ -85,6 +85,8 @@ export default function EstudioPage() {
   const [copiado, setCopiado] = useState<number | null>(null);
   const { resaltados, cargar, guardar, quitar } = useResaltados();
   const [menuState, setMenuState] = useState<{ versiculoId: number; rect: DOMRect } | null>(null);
+  // Ref síncrono para evitar que onClick copie cuando mouseup detectó una selección
+  const suppressCopyRef = useRef(false);
 
   useEffect(() => {
     apiClient
@@ -94,27 +96,31 @@ export default function EstudioPage() {
       .finally(() => setLoading(false));
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // Detección de selección de texto para menú de resaltado
+  // Cierra el menú con scroll o clic fuera
   useEffect(() => {
-    function onSelectionChange() {
-      const sel = window.getSelection();
-      if (!sel || sel.isCollapsed || !sel.rangeCount) { setMenuState(null); return; }
-      const range = sel.getRangeAt(0);
-      const node = range.commonAncestorContainer;
-      const el = node.nodeType === Node.TEXT_NODE ? node.parentElement : (node as Element);
-      const verseEl = el?.closest("[data-versiculo-id]");
-      if (!verseEl) { setMenuState(null); return; }
-      const versiculoId = Number(verseEl.getAttribute("data-versiculo-id"));
-      setMenuState({ versiculoId, rect: range.getBoundingClientRect() });
-    }
     const onScroll = () => setMenuState(null);
-    document.addEventListener("selectionchange", onSelectionChange);
     window.addEventListener("scroll", onScroll, true);
-    return () => {
-      document.removeEventListener("selectionchange", onSelectionChange);
-      window.removeEventListener("scroll", onScroll, true);
-    };
+    return () => window.removeEventListener("scroll", onScroll, true);
   }, []);
+
+  useEffect(() => {
+    if (!menuState) return;
+    function onMouseDown(e: MouseEvent) {
+      if (!(e.target as Element).closest("[data-highlight-menu]")) setMenuState(null);
+    }
+    document.addEventListener("mousedown", onMouseDown);
+    return () => document.removeEventListener("mousedown", onMouseDown);
+  }, [menuState]);
+
+  // Llamado por onMouseUp de cada <p> de versículo
+  function onVerseMouseUp(versiculoId: number) {
+    const sel = window.getSelection();
+    if (!sel || sel.isCollapsed || !sel.rangeCount) return;
+    const rect = sel.getRangeAt(0).getBoundingClientRect();
+    if (!rect.width && !rect.height) return;
+    suppressCopyRef.current = true;   // mouseup siempre precede a click
+    setMenuState({ versiculoId, rect });
+  }
 
   async function handleCompletar() {
     if (!data?.sesion) return;
@@ -229,12 +235,12 @@ export default function EstudioPage() {
                 )}
                 <p
                   data-versiculo-id={v.id}
+                  onMouseUp={() => onVerseMouseUp(v.id)}
                   onClick={() => {
-                    const sel = window.getSelection();
-                    if (sel && !sel.isCollapsed) return;
+                    if (suppressCopyRef.current) { suppressCopyRef.current = false; return; }
                     copiarVersiculo(v, referencia);
                   }}
-                  title="Clic para copiar · selecciona texto para resaltar"
+                  title="Clic para copiar · arrastra para resaltar"
                   style={{
                     backgroundColor: copiado === v.id
                       ? undefined

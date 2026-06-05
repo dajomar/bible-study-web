@@ -35,6 +35,7 @@ export function FloatingHighlightMenu({
         transform: "translate(-50%, -100%)",
         zIndex: 9999,
       }}
+      data-highlight-menu="true"
       className="bg-white border border-[#E8E4DF] rounded-xl shadow-lg px-3 py-2.5 flex items-center gap-1.5 select-none"
     >
       <span className="font-inter text-xs text-[#8A8A8A] mr-0.5 shrink-0">Resaltar</span>
