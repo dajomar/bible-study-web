@@ -6,6 +6,14 @@ import apiClient from "@/lib/axios";
 
 /* ── Interfaces ───────────────────────────────────────────── */
 
+interface SesionTemplate {
+  id: number;
+  orden: number;
+  abreviatura_libro: string;
+  capitulo_inicio: number;
+  capitulo_fin: number;
+}
+
 interface Fase {
   id: number;
   numero: number;
@@ -13,14 +21,6 @@ interface Fase {
   descripcion: string;
   color_acento: string;
   sesiones?: SesionTemplate[];
-}
-
-interface SesionTemplate {
-  id: number;
-  orden: number;
-  abreviatura_libro: string;
-  capitulo_inicio: number;
-  capitulo_fin: number;
 }
 
 interface Template {
@@ -41,40 +41,39 @@ interface Template {
 /* ── Constantes ───────────────────────────────────────────── */
 
 const VERSIONES = [
-  { valor: "RV1909", label: "RV1909", desc: "Reina-Valera 1909" },
+  { valor: "RV1909",  label: "RV1909",  desc: "Reina-Valera 1909" },
   { valor: "RVR1960", label: "RVR1960", desc: "Reina-Valera 1960" },
-  { valor: "NVI", label: "NVI", desc: "Nueva Versión Internacional" },
-  { valor: "TLA", label: "TLA", desc: "Traducción en Lenguaje Actual" },
+  { valor: "NVI",     label: "NVI",     desc: "Nueva Versión Internacional" },
+  { valor: "TLA",     label: "TLA",     desc: "Traducción en Lenguaje Actual" },
 ];
 
-// Grupos de templates por orden
 const GRUPOS = [
-  { titulo: "Para comenzar", ordenes: [1, 2] },
-  { titulo: "La vida y enseñanzas de Jesús", ordenes: [3, 4, 5] },
-  { titulo: "Recorrido completo", ordenes: [6, 7] },
+  { titulo: "Para comenzar",                  ordenes: [1, 2] },
+  { titulo: "La vida y enseñanzas de Jesús",  ordenes: [3, 4, 5] },
+  { titulo: "Recorrido completo",             ordenes: [6, 7] },
 ];
 
-// Emoji fallback para íconos Tabler
 const ICONOS: Record<string, string> = {
   "ti-seedling": "🌱",
-  "ti-sun": "☀️",
-  "ti-map-2": "🗺️",
-  "ti-book": "📖",
-  "ti-cross": "✝️",
-  "ti-heart": "♥",
+  "ti-sun":      "☀️",
+  "ti-map-2":    "🗺️",
+  "ti-book":     "📖",
+  "ti-cross":    "✝️",
+  "ti-heart":    "♥",
   "ti-timeline": "📋",
-  "ti-route": "🛤️",
-  "ti-compass": "🧭",
-  "ti-star": "⭐",
-  "ti-bible": "📖",
+  "ti-route":    "🛤️",
+  "ti-compass":  "🧭",
+  "ti-star":     "⭐",
+  "ti-bible":    "📖",
 };
 
-const COLOR: Record<string, { border: string; badge: string; text: string; bg: string }> = {
-  info:      { border: "border-[#4A6FA5]", badge: "bg-[#4A6FA5]/10 text-[#4A6FA5]", text: "text-[#4A6FA5]", bg: "bg-[#4A6FA5]/8" },
-  warning:   { border: "border-amber-400",  badge: "bg-amber-50 text-amber-600",    text: "text-amber-600", bg: "bg-amber-50" },
-  success:   { border: "border-emerald-500",badge: "bg-emerald-50 text-emerald-700",text: "text-emerald-700", bg: "bg-emerald-50" },
-  danger:    { border: "border-rose-400",   badge: "bg-rose-50 text-rose-600",      text: "text-rose-600", bg: "bg-rose-50" },
-  secondary: { border: "border-[#8A8A8A]",  badge: "bg-[#FAF8F5] text-[#8A8A8A]",  text: "text-[#8A8A8A]", bg: "bg-[#FAF8F5]" },
+// Colores de acento como valores CSS — evita clases Tailwind dinámicas
+const ACCENT: Record<string, string> = {
+  info:      "#4A6FA5",
+  warning:   "#D97706",
+  success:   "#059669",
+  danger:    "#E11D48",
+  secondary: "#8A8A8A",
 };
 
 const NIVEL_LABEL: Record<string, string> = {
@@ -84,12 +83,12 @@ const NIVEL_LABEL: Record<string, string> = {
   completo:     "Completo",
 };
 
-function icono(nombre: string) {
-  return ICONOS[nombre] ?? "📖";
+function ac(acento: string): string {
+  return ACCENT[acento] ?? ACCENT.secondary;
 }
 
-function color(acento: string) {
-  return COLOR[acento] ?? COLOR.secondary;
+function icono(nombre: string): string {
+  return ICONOS[nombre] ?? "📖";
 }
 
 type Vista = "lista" | "detalle";
@@ -101,13 +100,12 @@ export default function TemplatesPage() {
   const [templates, setTemplates] = useState<Template[]>([]);
   const [loading, setLoading] = useState(true);
 
-  // Vista y detalle
   const [vista, setVista] = useState<Vista>("lista");
   const [selected, setSelected] = useState<Template | null>(null);
   const [detalleFases, setDetalleFases] = useState<Fase[]>([]);
+  const [librosMap, setLibrosMap] = useState<Record<string, string>>({});
   const [loadingDetalle, setLoadingDetalle] = useState(false);
 
-  // Modal de adopción
   const [modalAbierto, setModalAbierto] = useState(false);
   const [version, setVersion] = useState("RVR1960");
   const [nombrePlan, setNombrePlan] = useState("");
@@ -126,8 +124,11 @@ export default function TemplatesPage() {
     setVista("detalle");
     setLoadingDetalle(true);
     try {
-      const res = await apiClient.get<{ fases: Fase[] }>(`/api/plan/templates/${t.id}`);
+      const res = await apiClient.get<{ fases: Fase[]; librosMap: Record<string, string> }>(
+        `/api/plan/templates/${t.id}`
+      );
       setDetalleFases(res.data.fases);
+      setLibrosMap(res.data.librosMap ?? {});
     } finally {
       setLoadingDetalle(false);
     }
@@ -213,7 +214,8 @@ export default function TemplatesPage() {
 
   /* ── Render: detalle ── */
   if (!selected) return null;
-  const c = color(selected.color_acento);
+
+  const color = ac(selected.color_acento);
   const totalSesiones = detalleFases.reduce((acc, f) => acc + (f.sesiones?.length ?? 0), 0);
   const librosUnicos = Array.from(new Set(
     detalleFases.flatMap((f) => (f.sesiones ?? []).map((s) => s.abreviatura_libro))
@@ -223,16 +225,19 @@ export default function TemplatesPage() {
     <main className="max-w-3xl mx-auto px-4 md:px-6 py-8 md:py-12">
       {/* Back */}
       <button
-        onClick={() => { setVista("lista"); setSelected(null); setDetalleFases([]); }}
+        onClick={() => { setVista("lista"); setSelected(null); setDetalleFases([]); setLibrosMap({}); }}
         className="font-inter text-sm text-[#8A8A8A] hover:text-[#2C2C2C] transition-colors mb-6 flex items-center gap-1"
       >
         ← Volver a los planes
       </button>
 
-      {/* Encabezado del template */}
+      {/* Encabezado */}
       <div className="mb-8">
         <div className="flex items-start gap-4 mb-3">
-          <span className={`text-3xl shrink-0 w-12 h-12 flex items-center justify-center rounded-xl border ${c.border} ${c.bg}`}>
+          <span
+            style={{ borderColor: color, backgroundColor: `${color}18` }}
+            className="text-3xl shrink-0 w-12 h-12 flex items-center justify-center rounded-xl border"
+          >
             {icono(selected.icono)}
           </span>
           <div>
@@ -251,10 +256,10 @@ export default function TemplatesPage() {
         {/* Métricas */}
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mt-5">
           {[
-            { label: "Nivel", valor: NIVEL_LABEL[selected.nivel] },
-            { label: "Días", valor: `~${selected.duracion_estimada_dias}` },
+            { label: "Nivel",    valor: NIVEL_LABEL[selected.nivel] },
+            { label: "Días",     valor: `~${selected.duracion_estimada_dias}` },
             { label: "Sesiones", valor: totalSesiones > 0 ? String(totalSesiones) : "—" },
-            { label: "Libros", valor: librosUnicos.length > 0 ? String(librosUnicos.length) : "—" },
+            { label: "Libros",   valor: librosUnicos.length > 0 ? String(librosUnicos.length) : "—" },
           ].map(({ label, valor }) => (
             <div key={label} className="border border-[#E8E4DF] rounded-xl px-4 py-3 text-center">
               <p className="font-inter text-xs text-[#8A8A8A] uppercase tracking-wide mb-0.5">{label}</p>
@@ -290,14 +295,21 @@ export default function TemplatesPage() {
         {!loadingDetalle && detalleFases.length > 0 && (
           <div className="space-y-3">
             {detalleFases.map((fase) => {
-              const fc = color(fase.color_acento);
+              const fc = ac(fase.color_acento);
               const libros = Array.from(new Set((fase.sesiones ?? []).map((s) => s.abreviatura_libro)));
               const sesCount = fase.sesiones?.length ?? 0;
               return (
-                <div key={fase.id} className={`border-l-2 ${fc.border} border border-[#E8E4DF] rounded-xl px-5 py-4`}>
+                <div
+                  key={fase.id}
+                  style={{ borderLeftColor: fc }}
+                  className="border border-[#E8E4DF] border-l-4 rounded-xl px-5 py-4"
+                >
                   <div className="flex items-start justify-between gap-3">
                     <div>
-                      <p className={`font-inter text-xs uppercase tracking-widest mb-1 ${fc.text}`}>
+                      <p
+                        style={{ color: fc }}
+                        className="font-inter text-xs uppercase tracking-widest mb-1"
+                      >
                         Fase {fase.numero}
                       </p>
                       <h3 className="font-lora text-base text-[#2C2C2C] mb-1">{fase.titulo}</h3>
@@ -311,9 +323,13 @@ export default function TemplatesPage() {
                   </div>
                   {libros.length > 0 && (
                     <div className="flex flex-wrap gap-1.5 mt-3">
-                      {libros.map((lib) => (
-                        <span key={lib} className={`font-inter text-xs px-2 py-0.5 rounded-full ${fc.badge}`}>
-                          {lib}
+                      {libros.map((abrev) => (
+                        <span
+                          key={abrev}
+                          style={{ backgroundColor: `${fc}18`, color: fc }}
+                          className="font-inter text-xs px-2 py-0.5 rounded-full capitalize"
+                        >
+                          {librosMap[abrev] ?? abrev}
                         </span>
                       ))}
                     </div>
@@ -347,7 +363,6 @@ export default function TemplatesPage() {
               </p>
             </div>
 
-            {/* Nombre del plan */}
             <div>
               <label className="block font-inter text-xs text-[#8A8A8A] uppercase tracking-wide mb-1.5">
                 Nombre del plan
@@ -362,7 +377,6 @@ export default function TemplatesPage() {
               />
             </div>
 
-            {/* Versión bíblica */}
             <div>
               <label className="block font-inter text-xs text-[#8A8A8A] uppercase tracking-wide mb-2">
                 Versión bíblica
@@ -393,7 +407,6 @@ export default function TemplatesPage() {
               <p className="font-inter text-xs text-red-500">{errorAdoptar}</p>
             )}
 
-            {/* Acciones */}
             <div className="flex gap-3 pt-1">
               <button
                 onClick={() => setModalAbierto(false)}
@@ -425,11 +438,12 @@ export default function TemplatesPage() {
 /* ── Card de template ─────────────────────────────────────── */
 
 function TemplateCard({ template: t, onClick }: { template: Template; onClick: () => void }) {
-  const c = color(t.color_acento);
+  const color = ac(t.color_acento);
   return (
     <button
       onClick={onClick}
-      className={`w-full text-left border-l-4 ${c.border} border border-[#E8E4DF] rounded-xl px-5 py-4 hover:bg-[#FAF8F5] transition-colors group`}
+      style={{ borderLeftColor: color, borderLeftWidth: "4px" }}
+      className="w-full text-left border border-[#E8E4DF] rounded-xl px-5 py-4 hover:bg-[#F0EDE8] transition-colors group"
     >
       <div className="flex items-start justify-between gap-3">
         <div className="flex items-start gap-3 flex-1 min-w-0">
@@ -445,7 +459,10 @@ function TemplateCard({ template: t, onClick }: { template: Template; onClick: (
             </div>
             <p className="font-inter text-sm text-[#8A8A8A] leading-5 line-clamp-2">{t.descripcion}</p>
             <div className="flex flex-wrap gap-1.5 mt-2.5">
-              <span className={`font-inter text-xs px-2 py-0.5 rounded-full ${c.badge}`}>
+              <span
+                style={{ backgroundColor: `${color}18`, color }}
+                className="font-inter text-xs px-2 py-0.5 rounded-full"
+              >
                 {NIVEL_LABEL[t.nivel]}
               </span>
               <span className="font-inter text-xs px-2 py-0.5 rounded-full bg-[#FAF8F5] text-[#8A8A8A] border border-[#E8E4DF]">

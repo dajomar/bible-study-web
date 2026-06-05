@@ -30,5 +30,22 @@ export async function GET(
   if (tError || !template) return NextResponse.json({ error: "Template no encontrado" }, { status: 404 });
   if (fError) return NextResponse.json({ error: fError.message }, { status: 500 });
 
-  return NextResponse.json({ template, fases });
+  // Resolver nombres completos de libros desde las abreviaturas de las sesiones
+  const abrevs = Array.from(new Set(
+    (fases ?? []).flatMap((f) =>
+      ((f.sesiones ?? []) as { abreviatura_libro: string }[]).map((s) => s.abreviatura_libro)
+    )
+  ));
+
+  const { data: librosData } = await supabase
+    .from("bible_libros")
+    .select("abreviatura, nombre")
+    .eq("version", "RVR1960")
+    .in("abreviatura", abrevs);
+
+  const librosMap: Record<string, string> = Object.fromEntries(
+    (librosData ?? []).map((l) => [l.abreviatura, l.nombre])
+  );
+
+  return NextResponse.json({ template, fases, librosMap });
 }

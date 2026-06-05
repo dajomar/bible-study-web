@@ -134,6 +134,11 @@ function PlanCard({
   const [expandido, setExpandido] = useState(activo);
   const { progreso } = plan;
 
+  const librosTotal = Array.from(new Set(sesiones.map((s) => s.inicio.capitulo.libro.nombre)));
+  const librosEstudiados = Array.from(new Set(
+    sesiones.filter((s) => s.completada).map((s) => s.inicio.capitulo.libro.nombre)
+  ));
+
   return (
     <div className="border border-[#E8E4DF] rounded-xl overflow-hidden">
       <div className="px-4 md:px-6 py-5">
@@ -166,6 +171,16 @@ function PlanCard({
               <div className="h-full bg-[#4A6FA5] rounded-full" style={{ width: `${progreso.porcentaje}%` }} />
             </div>
           </div>
+        )}
+
+        {/* Libros estudiados — solo cuando hay sesiones cargadas */}
+        {librosTotal.length > 0 && (
+          <p className="font-inter text-xs text-[#8A8A8A] mb-3">
+            {librosEstudiados.length > 0
+              ? `${librosEstudiados.length} de ${librosTotal.length} libro${librosTotal.length !== 1 ? "s" : ""} estudiado${librosEstudiados.length !== 1 ? "s" : ""}`
+              : `${librosTotal.length} libro${librosTotal.length !== 1 ? "s" : ""} en el plan`
+            }
+          </p>
         )}
 
         {progreso.total === 0 && (
