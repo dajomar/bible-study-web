@@ -22,6 +22,11 @@ interface Versiculo {
   texto: string;
 }
 
+interface Seccion {
+  versiculo_inicio: number;
+  titulo: string;
+}
+
 interface ResultadoBusqueda {
   id: number;
   numero: number;
@@ -83,6 +88,7 @@ export default function BibliaPage() {
   const [loadingVers, setLoadingVers] = useState(false);
 
   const [version, setVersion] = useState<string>("");
+  const [secciones, setSecciones] = useState<Seccion[]>([]);
   const [tamano, setTamano] = useState(1);
   const [copiado, setCopiado] = useState<number | null>(null);
 
@@ -129,11 +135,13 @@ export default function BibliaPage() {
     if (!libroIdVal || !capNum) return;
     setLoadingVers(true);
     setVersiculos([]);
+    setSecciones([]);
     try {
-      const res = await apiClient.get<{ versiculos: Versiculo[] }>(
+      const res = await apiClient.get<{ versiculos: Versiculo[]; secciones: Seccion[] }>(
         `/api/biblia?libro_id=${libroIdVal}&capitulo=${capNum}`
       );
       setVersiculos(res.data.versiculos);
+      setSecciones(res.data.secciones ?? []);
     } finally {
       setLoadingVers(false);
     }
@@ -434,26 +442,33 @@ export default function BibliaPage() {
 
               {versiculos.map((v) => {
                 const destacado = versiculoDestacado === v.numero;
+                const seccion = secciones.find((s) => s.versiculo_inicio === v.numero);
                 return (
-                  <p
-                    key={v.id}
-                    ref={(el) => { versiculoRefs.current[v.numero] = el; }}
-                    onClick={() => copiarVersiculo(v)}
-                    title="Clic para copiar"
-                    className={`font-lora ${FONT_SIZES[tamano].clase} rounded-md px-2 -mx-2 cursor-pointer transition-colors duration-500 ${
-                      copiado === v.id
-                        ? "bg-[#4A6FA5]/10 text-[#4A6FA5]"
-                        : destacado
-                        ? "bg-[#4A6FA5]/15 text-[#2C2C2C]"
-                        : "text-[#2C2C2C] hover:bg-[#F0EDE8]"
-                    }`}
-                  >
-                    <span className="text-[#8A8A8A] text-xs align-super mr-1.5 font-inter">{v.numero}</span>
-                    {v.texto}
-                    {copiado === v.id && (
-                      <span className="ml-2 font-inter text-xs text-[#4A6FA5] not-italic">copiado</span>
+                  <div key={v.id}>
+                    {seccion && (
+                      <p className="font-inter text-xs font-medium text-[#4A6FA5] uppercase tracking-widest mt-6 mb-2 px-2 -mx-2">
+                        {seccion.titulo}
+                      </p>
                     )}
-                  </p>
+                    <p
+                      ref={(el) => { versiculoRefs.current[v.numero] = el; }}
+                      onClick={() => copiarVersiculo(v)}
+                      title="Clic para copiar"
+                      className={`font-lora ${FONT_SIZES[tamano].clase} rounded-md px-2 -mx-2 cursor-pointer transition-colors duration-500 ${
+                        copiado === v.id
+                          ? "bg-[#4A6FA5]/10 text-[#4A6FA5]"
+                          : destacado
+                          ? "bg-[#4A6FA5]/15 text-[#2C2C2C]"
+                          : "text-[#2C2C2C] hover:bg-[#F0EDE8]"
+                      }`}
+                    >
+                      <span className="text-[#8A8A8A] text-xs align-super mr-1.5 font-inter">{v.numero}</span>
+                      {v.texto}
+                      {copiado === v.id && (
+                        <span className="ml-2 font-inter text-xs text-[#4A6FA5] not-italic">copiado</span>
+                      )}
+                    </p>
+                  </div>
                 );
               })}
             </div>

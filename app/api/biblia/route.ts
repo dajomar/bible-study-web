@@ -58,14 +58,22 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: "Capítulo no encontrado" }, { status: 404 });
     }
 
-    const { data: versiculos, error: verError } = await supabase
-      .from("bible_versiculos")
-      .select("id, numero, texto")
-      .eq("id_capitulo", capitulo.id)
-      .order("numero", { ascending: true });
+    const [{ data: versiculos, error: verError }, { data: secciones }] = await Promise.all([
+      supabase
+        .from("bible_versiculos")
+        .select("id, numero, texto")
+        .eq("id_capitulo", capitulo.id)
+        .order("numero", { ascending: true }),
+      supabase
+        .from("bible_secciones")
+        .select("versiculo_inicio, titulo")
+        .eq("id_libro", libroId)
+        .eq("capitulo", capituloNum)
+        .order("versiculo_inicio", { ascending: true }),
+    ]);
 
     if (verError) return NextResponse.json({ error: verError.message }, { status: 500 });
-    return NextResponse.json({ capitulo, versiculos });
+    return NextResponse.json({ capitulo, versiculos, secciones: secciones ?? [] });
   }
 
   return NextResponse.json({ error: "Parámetro libro_id requerido" }, { status: 400 });
