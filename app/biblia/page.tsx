@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState, useCallback, useMemo } from "react";
+import { Suspense, useEffect, useRef, useState, useCallback, useMemo } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import apiClient from "@/lib/axios";
 import { useResaltados } from "@/hooks/useResaltados";
@@ -129,6 +129,14 @@ function getSugerencias(input: string, libros: Libro[], limit = 6): Libro[] {
 type Modo = "referencia" | "busqueda" | "comparar";
 
 export default function BibliaPage() {
+  return (
+    <Suspense>
+      <BibliaContent />
+    </Suspense>
+  );
+}
+
+function BibliaContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
 

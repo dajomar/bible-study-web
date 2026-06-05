@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { Suspense, useEffect, useState } from "react";
 import { useSearchParams, useRouter } from "next/navigation";
 import apiClient from "@/lib/axios";
 
@@ -19,6 +19,14 @@ interface ResultadoVersion {
 }
 
 export default function CompararPage() {
+  return (
+    <Suspense>
+      <CompararContent />
+    </Suspense>
+  );
+}
+
+function CompararContent() {
   const searchParams = useSearchParams();
   const router = useRouter();
 
