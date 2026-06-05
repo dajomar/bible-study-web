@@ -1,0 +1,330 @@
+"use client";
+
+import { useEffect, useState } from "react";
+import apiClient from "@/lib/axios";
+
+interface Progreso { total: number; completadas: number; porcentaje: number }
+
+interface Plan {
+  id: number;
+  nombre: string;
+  descripcion: string | null;
+  activo: boolean;
+  created_at: string;
+  progreso: Progreso;
+}
+
+interface CapInfo { numero: number; libro: { nombre: string } }
+interface Sesion {
+  id: number;
+  orden: number;
+  completada: boolean;
+  fecha_programada: string | null;
+  fecha_completada: string | null;
+  inicio: { numero: number; capitulo: CapInfo };
+  fin: { numero: number; capitulo: CapInfo };
+}
+
+interface PlanData { planes: Plan[]; sesiones: Sesion[] }
+
+function buildRef(s: Sesion): string {
+  const ini = s.inicio;
+  const fin = s.fin;
+  const mismoLibro = ini.capitulo.libro.nombre === fin.capitulo.libro.nombre;
+  const mismoCap = ini.capitulo.numero === fin.capitulo.numero;
+  if (mismoCap) return `${ini.capitulo.libro.nombre} ${ini.capitulo.numero}:${ini.numero}–${fin.numero}`;
+  if (mismoLibro) return `${ini.capitulo.libro.nombre} ${ini.capitulo.numero}:${ini.numero} – ${fin.capitulo.numero}:${fin.numero}`;
+  return `${ini.capitulo.libro.nombre} ${ini.capitulo.numero}:${ini.numero} – ${fin.capitulo.libro.nombre} ${fin.capitulo.numero}:${fin.numero}`;
+}
+
+export default function PlanPage() {
+  const [data, setData] = useState<PlanData | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [mostrarFormulario, setMostrarFormulario] = useState(false);
+
+  async function cargar() {
+    const res = await apiClient.get<PlanData>("/api/plan");
+    setData(res.data);
+  }
+
+  useEffect(() => {
+    cargar().finally(() => setLoading(false));
+  }, []);
+
+  async function handleActivar(planId: number) {
+    await apiClient.put(`/api/plan/${planId}`, { activo: true });
+    await cargar();
+  }
+
+  function handlePlanCreado() {
+    setMostrarFormulario(false);
+    cargar();
+  }
+
+  if (loading) return <LoadingSkeleton />;
+  if (!data) return null;
+
+  const planActivo = data.planes.find((p) => p.activo);
+  const otrosPlanes = data.planes.filter((p) => !p.activo);
+
+  return (
+    <main className="max-w-4xl mx-auto px-6 py-12">
+      {/* Encabezado */}
+      <div className="flex items-start justify-between mb-10">
+        <div>
+          <h1 className="font-lora text-3xl text-[#2C2C2C]">Plan de estudios</h1>
+          <p className="font-inter text-sm text-[#8A8A8A] mt-1">
+            {data.planes.length === 0 ? "Sin planes todavía" : `${data.planes.length} plan${data.planes.length !== 1 ? "es" : ""}`}
+          </p>
+        </div>
+        <button
+          onClick={() => setMostrarFormulario(true)}
+          className="bg-[#4A6FA5] text-white font-inter text-sm px-4 py-2.5 rounded-lg hover:bg-[#3d5f8f] transition-colors"
+        >
+          Nuevo plan
+        </button>
+      </div>
+
+      {/* Formulario nuevo plan */}
+      {mostrarFormulario && (
+        <NuevoPlanForm onCreado={handlePlanCreado} onCancelar={() => setMostrarFormulario(false)} />
+      )}
+
+      {/* Plan activo */}
+      {planActivo && (
+        <section className="mb-10">
+          <p className="font-inter text-xs text-[#8A8A8A] uppercase tracking-wide mb-3">Plan activo</p>
+          <PlanCard plan={planActivo} activo sesiones={data.sesiones} />
+        </section>
+      )}
+
+      {/* Sin planes */}
+      {data.planes.length === 0 && !mostrarFormulario && (
+        <div className="border border-[#E8E4DF] rounded-xl p-8 text-center">
+          <p className="font-lora text-lg text-[#2C2C2C] mb-2">Sin planes todavía</p>
+          <p className="font-inter text-sm text-[#8A8A8A]">Crea un plan para comenzar tu estudio.</p>
+        </div>
+      )}
+
+      {/* Otros planes */}
+      {otrosPlanes.length > 0 && (
+        <section>
+          <p className="font-inter text-xs text-[#8A8A8A] uppercase tracking-wide mb-3">Otros planes</p>
+          <div className="space-y-3">
+            {otrosPlanes.map((p) => (
+              <PlanCard key={p.id} plan={p} activo={false} sesiones={[]} onActivar={() => handleActivar(p.id)} />
+            ))}
+          </div>
+        </section>
+      )}
+    </main>
+  );
+}
+
+/* ── Plan Card ─────────────────────────────────────────── */
+
+function PlanCard({
+  plan, activo, sesiones, onActivar,
+}: {
+  plan: Plan; activo: boolean; sesiones: Sesion[]; onActivar?: () => void;
+}) {
+  const [expandido, setExpandido] = useState(activo);
+  const { progreso } = plan;
+
+  return (
+    <div className="border border-[#E8E4DF] rounded-xl overflow-hidden">
+      {/* Cabecera */}
+      <div className="px-6 py-5">
+        <div className="flex items-start justify-between gap-4">
+          <div className="flex-1">
+            <div className="flex items-center gap-2 mb-1">
+              <p className="font-lora text-lg text-[#2C2C2C]">{plan.nombre}</p>
+              {activo && (
+                <span className="font-inter text-xs bg-[#4A6FA5] text-white px-2 py-0.5 rounded-full">
+                  activo
+                </span>
+              )}
+            </div>
+            {plan.descripcion && (
+              <p className="font-inter text-sm text-[#8A8A8A] mb-3">{plan.descripcion}</p>
+            )}
+
+            {/* Barra de progreso */}
+            {progreso.total > 0 && (
+              <div>
+                <div className="flex justify-between mb-1">
+                  <span className="font-inter text-xs text-[#8A8A8A]">
+                    {progreso.completadas} / {progreso.total} sesiones
+                  </span>
+                  <span className="font-inter text-xs text-[#4A6FA5] font-medium">
+                    {progreso.porcentaje}%
+                  </span>
+                </div>
+                <div className="h-1.5 bg-[#E8E4DF] rounded-full overflow-hidden">
+                  <div
+                    className="h-full bg-[#4A6FA5] rounded-full"
+                    style={{ width: `${progreso.porcentaje}%` }}
+                  />
+                </div>
+              </div>
+            )}
+
+            {progreso.total === 0 && (
+              <p className="font-inter text-xs text-[#8A8A8A]">Sin sesiones — el agente las generará</p>
+            )}
+          </div>
+
+          <div className="flex items-center gap-2 shrink-0">
+            {!activo && onActivar && (
+              <button
+                onClick={onActivar}
+                className="font-inter text-xs text-[#4A6FA5] border border-[#4A6FA5] px-3 py-1.5 rounded-lg hover:bg-[#4A6FA5] hover:text-white transition-colors"
+              >
+                Activar
+              </button>
+            )}
+            {sesiones.length > 0 && (
+              <button
+                onClick={() => setExpandido((v) => !v)}
+                className="font-inter text-xs text-[#8A8A8A] hover:text-[#2C2C2C] transition-colors"
+              >
+                {expandido ? "Ocultar" : "Ver sesiones"}
+              </button>
+            )}
+          </div>
+        </div>
+      </div>
+
+      {/* Lista de sesiones */}
+      {expandido && sesiones.length > 0 && (
+        <div className="border-t border-[#E8E4DF]">
+          <div className="max-h-80 overflow-y-auto">
+            {sesiones.map((s) => (
+              <SesionRow key={s.id} sesion={s} />
+            ))}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function SesionRow({ sesion }: { sesion: Sesion }) {
+  const ref = buildRef(sesion);
+  return (
+    <div className={`flex items-center gap-4 px-6 py-3 border-b border-[#E8E4DF] last:border-0 ${sesion.completada ? "opacity-50" : ""}`}>
+      {/* Indicador */}
+      <div className={`w-2 h-2 rounded-full shrink-0 ${sesion.completada ? "bg-[#4A6FA5]" : "bg-[#E8E4DF] border border-[#8A8A8A]"}`} />
+
+      <div className="flex-1 min-w-0">
+        <span className="font-inter text-xs text-[#8A8A8A] mr-2">Día {sesion.orden}</span>
+        <span className="font-inter text-sm text-[#2C2C2C]">{ref}</span>
+      </div>
+
+      <div className="shrink-0 text-right">
+        {sesion.fecha_programada && (
+          <p className="font-inter text-xs text-[#8A8A8A]">
+            {new Date(sesion.fecha_programada + "T00:00:00").toLocaleDateString("es-ES", { day: "numeric", month: "short" })}
+          </p>
+        )}
+        {sesion.completada && (
+          <p className="font-inter text-xs text-[#4A6FA5]">✓</p>
+        )}
+      </div>
+    </div>
+  );
+}
+
+/* ── Formulario nuevo plan ─────────────────────────────── */
+
+function NuevoPlanForm({ onCreado, onCancelar }: { onCreado: () => void; onCancelar: () => void }) {
+  const [nombre, setNombre] = useState("");
+  const [descripcion, setDescripcion] = useState("");
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState("");
+
+  async function handleSubmit(e: React.FormEvent) {
+    e.preventDefault();
+    setError("");
+    setLoading(true);
+    try {
+      await apiClient.post("/api/plan", { nombre, descripcion });
+      onCreado();
+    } catch (err: unknown) {
+      const msg = (err as { response?: { data?: { error?: string } } })?.response?.data?.error || "Error al crear el plan";
+      setError(msg);
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  return (
+    <div className="border border-[#4A6FA5] rounded-xl p-6 mb-8">
+      <p className="font-lora text-lg text-[#2C2C2C] mb-5">Nuevo plan</p>
+      <form onSubmit={handleSubmit} className="space-y-4">
+        <div>
+          <label className="block font-inter text-xs text-[#8A8A8A] uppercase tracking-wide mb-1.5">Nombre</label>
+          <input
+            type="text"
+            value={nombre}
+            onChange={(e) => setNombre(e.target.value)}
+            placeholder="Ej: Plan cronológico 2025"
+            required
+            className="w-full border border-[#E8E4DF] rounded-lg px-4 py-2.5 font-inter text-sm text-[#2C2C2C] bg-[#FAF8F5] outline-none focus:border-[#4A6FA5] transition-colors"
+          />
+        </div>
+        <div>
+          <label className="block font-inter text-xs text-[#8A8A8A] uppercase tracking-wide mb-1.5">Descripción <span className="normal-case">(opcional)</span></label>
+          <textarea
+            value={descripcion}
+            onChange={(e) => setDescripcion(e.target.value)}
+            placeholder="Descripción del plan..."
+            rows={2}
+            className="w-full border border-[#E8E4DF] rounded-lg px-4 py-2.5 font-inter text-sm text-[#2C2C2C] bg-[#FAF8F5] outline-none focus:border-[#4A6FA5] transition-colors resize-none"
+          />
+        </div>
+        {error && <p className="font-inter text-sm text-red-500">{error}</p>}
+        <div className="flex gap-3 pt-1">
+          <button
+            type="submit"
+            disabled={loading}
+            className="bg-[#4A6FA5] text-white font-inter text-sm px-5 py-2.5 rounded-lg hover:bg-[#3d5f8f] transition-colors disabled:opacity-50"
+          >
+            {loading ? "Creando..." : "Crear plan"}
+          </button>
+          <button
+            type="button"
+            onClick={onCancelar}
+            className="font-inter text-sm text-[#8A8A8A] hover:text-[#2C2C2C] transition-colors"
+          >
+            Cancelar
+          </button>
+        </div>
+      </form>
+    </div>
+  );
+}
+
+/* ── Skeleton ──────────────────────────────────────────── */
+
+function LoadingSkeleton() {
+  return (
+    <main className="max-w-4xl mx-auto px-6 py-12">
+      <div className="flex justify-between mb-10">
+        <div>
+          <div className="h-8 w-48 bg-[#E8E4DF] rounded animate-pulse mb-2" />
+          <div className="h-3 w-24 bg-[#E8E4DF] rounded animate-pulse" />
+        </div>
+        <div className="h-10 w-28 bg-[#E8E4DF] rounded-lg animate-pulse" />
+      </div>
+      <div className="space-y-4">
+        {[...Array(2)].map((_, i) => (
+          <div key={i} className="border border-[#E8E4DF] rounded-xl p-6">
+            <div className="h-5 w-48 bg-[#E8E4DF] rounded animate-pulse mb-3" />
+            <div className="h-1.5 bg-[#E8E4DF] rounded-full animate-pulse" />
+          </div>
+        ))}
+      </div>
+    </main>
+  );
+}

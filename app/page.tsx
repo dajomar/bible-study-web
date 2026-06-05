@@ -1,101 +1,262 @@
-import Image from "next/image";
+"use client";
 
-export default function Home() {
+import { useEffect, useState } from "react";
+import Link from "next/link";
+import apiClient from "@/lib/axios";
+
+interface SesionHoy {
+  id: number;
+  orden: number;
+  completada: boolean;
+  fecha_programada: string;
+  inicio: {
+    numero: number;
+    capitulo: { numero: number; libro: { nombre: string; abreviatura: string } };
+  };
+  fin: {
+    numero: number;
+    capitulo: { numero: number; libro: { nombre: string; abreviatura: string } };
+  };
+}
+
+interface Tarea {
+  id: number;
+  descripcion: string;
+  origen: "llama" | "usuario";
+  created_at: string;
+}
+
+interface DashboardData {
+  plan: { id: number; nombre: string } | null;
+  sesionHoy: SesionHoy | null;
+  progreso: { total: number; completadas: number; porcentaje: number } | null;
+  tareasHoy: Tarea[];
+}
+
+function referenciaBiblica(sesion: SesionHoy): string {
+  const ini = sesion.inicio;
+  const fin = sesion.fin;
+  const mismoLibro = ini.capitulo.libro.nombre === fin.capitulo.libro.nombre;
+  const mismoCapitulo = ini.capitulo.numero === fin.capitulo.numero;
+
+  if (mismoCapitulo) {
+    return `${ini.capitulo.libro.nombre} ${ini.capitulo.numero}:${ini.numero}–${fin.numero}`;
+  }
+  if (mismoLibro) {
+    return `${ini.capitulo.libro.nombre} ${ini.capitulo.numero}:${ini.numero} – ${fin.capitulo.numero}:${fin.numero}`;
+  }
+  return `${ini.capitulo.libro.nombre} ${ini.capitulo.numero}:${ini.numero} – ${fin.capitulo.libro.nombre} ${fin.capitulo.numero}:${fin.numero}`;
+}
+
+export default function DashboardPage() {
+  const [data, setData] = useState<DashboardData | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
+
+  useEffect(() => {
+    apiClient
+      .get<DashboardData>("/api/dashboard")
+      .then((res) => setData(res.data))
+      .catch(() => setError("No se pudo cargar el dashboard"))
+      .finally(() => setLoading(false));
+  }, []);
+
+  if (loading) return <LoadingSkeleton />;
+  if (error) return <ErrorMsg msg={error} />;
+  if (!data) return null;
+
+  const hoy = new Date().toLocaleDateString("es-ES", {
+    weekday: "long",
+    day: "numeric",
+    month: "long",
+  });
+
   return (
-    <div className="grid grid-rows-[20px_1fr_20px] items-center justify-items-center min-h-screen p-8 pb-20 gap-16 sm:p-20 font-[family-name:var(--font-geist-sans)]">
-      <main className="flex flex-col gap-8 row-start-2 items-center sm:items-start">
-        <Image
-          className="dark:invert"
-          src="https://nextjs.org/icons/next.svg"
-          alt="Next.js logo"
-          width={180}
-          height={38}
-          priority
-        />
-        <ol className="list-inside list-decimal text-sm text-center sm:text-left font-[family-name:var(--font-geist-mono)]">
-          <li className="mb-2">
-            Get started by editing{" "}
-            <code className="bg-black/[.05] dark:bg-white/[.06] px-1 py-0.5 rounded font-semibold">
-              app/page.tsx
-            </code>
-            .
-          </li>
-          <li>Save and see your changes instantly.</li>
-        </ol>
+    <main className="max-w-4xl mx-auto px-6 py-12">
+      {/* Encabezado */}
+      <div className="mb-10">
+        <p className="font-inter text-sm text-[#8A8A8A] capitalize mb-1">{hoy}</p>
+        <h1 className="font-lora text-3xl text-[#2C2C2C]">Buenos días</h1>
+      </div>
 
-        <div className="flex gap-4 items-center flex-col sm:flex-row">
-          <a
-            className="rounded-full border border-solid border-transparent transition-colors flex items-center justify-center bg-foreground text-background gap-2 hover:bg-[#383838] dark:hover:bg-[#ccc] text-sm sm:text-base h-10 sm:h-12 px-4 sm:px-5"
-            href="https://vercel.com/new?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            <Image
-              className="dark:invert"
-              src="https://nextjs.org/icons/vercel.svg"
-              alt="Vercel logomark"
-              width={20}
-              height={20}
-            />
-            Deploy now
-          </a>
-          <a
-            className="rounded-full border border-solid border-black/[.08] dark:border-white/[.145] transition-colors flex items-center justify-center hover:bg-[#f2f2f2] dark:hover:bg-[#1a1a1a] hover:border-transparent text-sm sm:text-base h-10 sm:h-12 px-4 sm:px-5 sm:min-w-44"
-            href="https://nextjs.org/docs?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            Read our docs
-          </a>
+      {/* Sin plan */}
+      {!data.plan && <SinPlan />}
+
+      {data.plan && (
+        <div className="space-y-6">
+          {/* Sesión de hoy */}
+          <SesionCard sesion={data.sesionHoy} planNombre={data.plan.nombre} />
+
+          {/* Progreso */}
+          {data.progreso && <ProgresoCard progreso={data.progreso} planNombre={data.plan.nombre} />}
+
+          {/* Tareas pendientes */}
+          {data.tareasHoy.length > 0 && <TareasCard tareas={data.tareasHoy} />}
         </div>
-      </main>
-      <footer className="row-start-3 flex gap-6 flex-wrap items-center justify-center">
-        <a
-          className="flex items-center gap-2 hover:underline hover:underline-offset-4"
-          href="https://nextjs.org/learn?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <Image
-            aria-hidden
-            src="https://nextjs.org/icons/file.svg"
-            alt="File icon"
-            width={16}
-            height={16}
-          />
-          Learn
-        </a>
-        <a
-          className="flex items-center gap-2 hover:underline hover:underline-offset-4"
-          href="https://vercel.com/templates?framework=next.js&utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <Image
-            aria-hidden
-            src="https://nextjs.org/icons/window.svg"
-            alt="Window icon"
-            width={16}
-            height={16}
-          />
-          Examples
-        </a>
-        <a
-          className="flex items-center gap-2 hover:underline hover:underline-offset-4"
-          href="https://nextjs.org?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <Image
-            aria-hidden
-            src="https://nextjs.org/icons/globe.svg"
-            alt="Globe icon"
-            width={16}
-            height={16}
-          />
-          Go to nextjs.org →
-        </a>
-      </footer>
+      )}
+    </main>
+  );
+}
+
+/* ── Subcomponentes ──────────────────────────────────── */
+
+function SinPlan() {
+  return (
+    <div className="border border-[#E8E4DF] rounded-xl p-8 text-center">
+      <p className="font-lora text-lg text-[#2C2C2C] mb-2">No tienes un plan activo</p>
+      <p className="font-inter text-sm text-[#8A8A8A] mb-6">
+        Crea un plan de lectura para comenzar tu estudio.
+      </p>
+      <Link
+        href="/plan"
+        className="inline-block bg-[#4A6FA5] text-white font-inter text-sm px-5 py-2.5 rounded-lg hover:bg-[#3d5f8f] transition-colors"
+      >
+        Crear plan
+      </Link>
     </div>
+  );
+}
+
+function SesionCard({
+  sesion,
+  planNombre,
+}: {
+  sesion: SesionHoy | null;
+  planNombre: string;
+}) {
+  if (!sesion) {
+    return (
+      <div className="border border-[#E8E4DF] rounded-xl p-6">
+        <p className="font-inter text-xs text-[#8A8A8A] uppercase tracking-wide mb-1">
+          Sesión de hoy · {planNombre}
+        </p>
+        <p className="font-inter text-sm text-[#8A8A8A]">
+          No hay sesión programada para hoy.
+        </p>
+      </div>
+    );
+  }
+
+  const ref = referenciaBiblica(sesion);
+
+  return (
+    <div className="border border-[#E8E4DF] rounded-xl p-6">
+      <div className="flex items-start justify-between gap-4">
+        <div>
+          <p className="font-inter text-xs text-[#8A8A8A] uppercase tracking-wide mb-2">
+            Sesión de hoy · {planNombre}
+          </p>
+          <p className="font-lora text-xl text-[#2C2C2C] mb-1">{ref}</p>
+          <p className="font-inter text-sm text-[#8A8A8A]">
+            Día {sesion.orden}
+            {sesion.completada && " · Completada"}
+          </p>
+        </div>
+
+        {!sesion.completada && (
+          <Link
+            href="/estudio"
+            className="shrink-0 bg-[#4A6FA5] text-white font-inter text-sm px-4 py-2 rounded-lg hover:bg-[#3d5f8f] transition-colors"
+          >
+            Estudiar
+          </Link>
+        )}
+
+        {sesion.completada && (
+          <span className="shrink-0 bg-[#FAF8F5] border border-[#E8E4DF] text-[#8A8A8A] font-inter text-xs px-3 py-1.5 rounded-lg">
+            ✓ Completada
+          </span>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function ProgresoCard({
+  progreso,
+  planNombre,
+}: {
+  progreso: { total: number; completadas: number; porcentaje: number };
+  planNombre: string;
+}) {
+  return (
+    <div className="border border-[#E8E4DF] rounded-xl p-6">
+      <div className="flex items-center justify-between mb-4">
+        <p className="font-inter text-xs text-[#8A8A8A] uppercase tracking-wide">
+          Progreso · {planNombre}
+        </p>
+        <p className="font-inter text-sm font-medium text-[#4A6FA5]">
+          {progreso.porcentaje}%
+        </p>
+      </div>
+
+      {/* Barra */}
+      <div className="h-1.5 bg-[#E8E4DF] rounded-full overflow-hidden mb-3">
+        <div
+          className="h-full bg-[#4A6FA5] rounded-full transition-all"
+          style={{ width: `${progreso.porcentaje}%` }}
+        />
+      </div>
+
+      <p className="font-inter text-sm text-[#8A8A8A]">
+        {progreso.completadas} de {progreso.total} sesiones completadas
+      </p>
+    </div>
+  );
+}
+
+function TareasCard({ tareas }: { tareas: Tarea[] }) {
+  return (
+    <div className="border border-[#E8E4DF] rounded-xl p-6">
+      <div className="flex items-center justify-between mb-4">
+        <p className="font-inter text-xs text-[#8A8A8A] uppercase tracking-wide">
+          Tareas pendientes
+        </p>
+        <span className="font-inter text-xs bg-[#FAF8F5] border border-[#E8E4DF] text-[#8A8A8A] px-2 py-0.5 rounded-full">
+          {tareas.length}
+        </span>
+      </div>
+
+      <ul className="space-y-3">
+        {tareas.map((t) => (
+          <li key={t.id} className="flex items-start gap-3">
+            <span className="mt-0.5 w-1.5 h-1.5 rounded-full bg-[#4A6FA5] shrink-0" />
+            <div>
+              <p className="font-inter text-sm text-[#2C2C2C]">{t.descripcion}</p>
+              <p className="font-inter text-xs text-[#8A8A8A] mt-0.5 capitalize">
+                {t.origen === "llama" ? "Generada por IA" : "Creada por ti"}
+              </p>
+            </div>
+          </li>
+        ))}
+      </ul>
+    </div>
+  );
+}
+
+function LoadingSkeleton() {
+  return (
+    <main className="max-w-4xl mx-auto px-6 py-12">
+      <div className="mb-10">
+        <div className="h-3 w-32 bg-[#E8E4DF] rounded mb-2 animate-pulse" />
+        <div className="h-8 w-48 bg-[#E8E4DF] rounded animate-pulse" />
+      </div>
+      <div className="space-y-6">
+        {[1, 2, 3].map((i) => (
+          <div key={i} className="border border-[#E8E4DF] rounded-xl p-6">
+            <div className="h-3 w-24 bg-[#E8E4DF] rounded mb-3 animate-pulse" />
+            <div className="h-5 w-56 bg-[#E8E4DF] rounded animate-pulse" />
+          </div>
+        ))}
+      </div>
+    </main>
+  );
+}
+
+function ErrorMsg({ msg }: { msg: string }) {
+  return (
+    <main className="max-w-4xl mx-auto px-6 py-12">
+      <p className="font-inter text-sm text-red-500">{msg}</p>
+    </main>
   );
 }
