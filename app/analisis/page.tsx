@@ -33,6 +33,7 @@ interface Versiculo {
   numero: number;
   texto: string;
   id_capitulo: number;
+  capitulo_numero: number;
 }
 
 const FONT_SIZES = [
@@ -219,24 +220,37 @@ export default function AnalisisPage() {
 
                       {!cargandoVers && versiculos.length > 0 && (
                         <div className="space-y-0.5">
-                          {versiculos.map((v) => (
-                            <p
-                              key={v.id}
-                              onClick={(e) => { e.stopPropagation(); copiarVersiculo(v, referencia); }}
-                              title="Clic para copiar"
-                              className={`font-lora ${FONT_SIZES[tamano]} text-[#2C2C2C] rounded-md px-2 -mx-2 cursor-pointer transition-colors ${
-                                copiado === v.id
-                                  ? "bg-[#4A6FA5]/10 text-[#4A6FA5]"
-                                  : "hover:bg-[#F0EDE8]"
-                              }`}
-                            >
-                              <span className="text-[#8A8A8A] text-xs align-super mr-1 font-inter">{v.numero}</span>
-                              {v.texto}
-                              {copiado === v.id && (
-                                <span className="ml-2 font-inter text-xs text-[#4A6FA5] not-italic">copiado</span>
-                              )}
-                            </p>
-                          ))}
+                          {versiculos.map((v, i) => {
+                            const esNuevoCapitulo = i === 0 || v.id_capitulo !== versiculos[i - 1].id_capitulo;
+                            return (
+                              <div key={v.id}>
+                                {esNuevoCapitulo && (
+                                  <div className={`flex items-center gap-3 ${i === 0 ? "mb-4" : "mt-7 mb-4"}`}>
+                                    <div className="flex-1 h-px bg-[#E8E4DF]" />
+                                    <p className="font-lora text-sm text-[#4A6FA5] tracking-wide">
+                                      Capítulo {v.capitulo_numero}
+                                    </p>
+                                    <div className="flex-1 h-px bg-[#E8E4DF]" />
+                                  </div>
+                                )}
+                                <p
+                                  onClick={(e) => { e.stopPropagation(); copiarVersiculo(v, referencia); }}
+                                  title="Clic para copiar"
+                                  className={`font-lora ${FONT_SIZES[tamano]} text-[#2C2C2C] rounded-md px-2 -mx-2 cursor-pointer transition-colors ${
+                                    copiado === v.id
+                                      ? "bg-[#4A6FA5]/10 text-[#4A6FA5]"
+                                      : "hover:bg-[#F0EDE8]"
+                                  }`}
+                                >
+                                  <span className="text-[#8A8A8A] text-xs align-super mr-1 font-inter">{v.numero}</span>
+                                  {v.texto}
+                                  {copiado === v.id && (
+                                    <span className="ml-2 font-inter text-xs text-[#4A6FA5] not-italic">copiado</span>
+                                  )}
+                                </p>
+                              </div>
+                            );
+                          })}
                         </div>
                       )}
                     </div>
