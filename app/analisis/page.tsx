@@ -2,6 +2,8 @@
 
 import { useEffect, useState } from "react";
 import apiClient from "@/lib/axios";
+import { useResaltados } from "@/hooks/useResaltados";
+import { FloatingHighlightMenu, COLORES_RESALTADO } from "@/components/ui/FloatingHighlightMenu";
 
 interface CapituloInfo {
   numero: number;
@@ -76,6 +78,29 @@ export default function AnalisisPage() {
   const [loadingVers, setLoadingVers] = useState<number | null>(null);
   const [tamano, setTamano] = useState(1);
   const [copiado, setCopiad] = useState<number | null>(null);
+  const { resaltados, cargar, guardar, quitar } = useResaltados();
+  const [menuState, setMenuState] = useState<{ versiculoId: number; rect: DOMRect } | null>(null);
+
+  useEffect(() => {
+    function onSelectionChange() {
+      const sel = window.getSelection();
+      if (!sel || sel.isCollapsed || !sel.rangeCount) { setMenuState(null); return; }
+      const range = sel.getRangeAt(0);
+      const node = range.commonAncestorContainer;
+      const el = node.nodeType === Node.TEXT_NODE ? node.parentElement : (node as Element);
+      const verseEl = el?.closest("[data-versiculo-id]");
+      if (!verseEl) { setMenuState(null); return; }
+      const versiculoId = Number(verseEl.getAttribute("data-versiculo-id"));
+      setMenuState({ versiculoId, rect: range.getBoundingClientRect() });
+    }
+    const onScroll = () => setMenuState(null);
+    document.addEventListener("selectionchange", onSelectionChange);
+    window.addEventListener("scroll", onScroll, true);
+    return () => {
+      document.removeEventListener("selectionchange", onSelectionChange);
+      window.removeEventListener("scroll", onScroll, true);
+    };
+  }, []);
 
   useEffect(() => {
     apiClient
@@ -96,6 +121,7 @@ export default function AnalisisPage() {
         );
         setVersiculosMap((prev) => ({ ...prev, [sesion.id]: res.data.versiculos }));
         setSeccionesMap((prev) => ({ ...prev, [sesion.id]: res.data.secciones ?? [] }));
+        cargar(res.data.versiculos.map((v: Versiculo) => v.id));
       } finally {
         setLoadingVers(null);
       }
@@ -251,8 +277,21 @@ export default function AnalisisPage() {
                                   </p>
                                 )}
                                 <p
-                                  onClick={(e) => { e.stopPropagation(); copiarVersiculo(v, referencia); }}
-                                  title="Clic para copiar"
+                                  data-versiculo-id={v.id}
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    const sel = window.getSelection();
+                                    if (sel && !sel.isCollapsed) return;
+                                    copiarVersiculo(v, referencia);
+                                  }}
+                                  title="Clic para copiar · selecciona texto para resaltar"
+                                  style={{
+                                    backgroundColor: copiado === v.id
+                                      ? undefined
+                                      : resaltados[v.id]
+                                        ? COLORES_RESALTADO[resaltados[v.id]].bg
+                                        : undefined,
+                                  }}
                                   className={`font-lora ${FONT_SIZES[tamano]} text-[#2C2C2C] rounded-md px-2 -mx-2 cursor-pointer transition-colors ${
                                     copiado === v.id
                                       ? "bg-[#4A6FA5]/10 text-[#4A6FA5]"
@@ -287,6 +326,24 @@ export default function AnalisisPage() {
             );
           })}
         </div>
+      )}
+
+      {menuState && (
+        <FloatingHighlightMenu
+          versiculoId={menuState.versiculoId}
+          rect={menuState.rect}
+          resaltadoActual={resaltados[menuState.versiculoId]}
+          onColor={(id, color) => {
+            guardar(id, color);
+            setMenuState(null);
+            window.getSelection()?.removeAllRanges();
+          }}
+          onQuitar={(id) => {
+            quitar(id);
+            setMenuState(null);
+            window.getSelection()?.removeAllRanges();
+          }}
+        />
       )}
     </main>
   );

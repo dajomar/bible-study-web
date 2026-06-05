@@ -2,6 +2,8 @@
 
 import { useEffect, useState, useCallback, useRef, useMemo } from "react";
 import apiClient from "@/lib/axios";
+import { useResaltados } from "@/hooks/useResaltados";
+import { FloatingHighlightMenu, COLORES_RESALTADO } from "@/components/ui/FloatingHighlightMenu";
 
 interface Libro {
   id: number;
@@ -144,6 +146,8 @@ export default function BibliaPage() {
   const [tamano, setTamano] = useState(1);
   const [copiado, setCopiado] = useState<number | null>(null);
   const [modo, setModo] = useState<Modo>("referencia");
+  const { resaltados, cargar, guardar, quitar } = useResaltados();
+  const [menuState, setMenuState] = useState<{ versiculoId: number; rect: DOMRect } | null>(null);
 
   // ── Estado: modo referencia ──
   const [inputRef, setInputRef] = useState("");
@@ -190,6 +194,28 @@ export default function BibliaPage() {
     }
   }, [versiculos, versiculoDestacado]);
 
+  // Detección de selección de texto para menú de resaltado
+  useEffect(() => {
+    function onSelectionChange() {
+      const sel = window.getSelection();
+      if (!sel || sel.isCollapsed || !sel.rangeCount) { setMenuState(null); return; }
+      const range = sel.getRangeAt(0);
+      const node = range.commonAncestorContainer;
+      const el = node.nodeType === Node.TEXT_NODE ? node.parentElement : (node as Element);
+      const verseEl = el?.closest("[data-versiculo-id]");
+      if (!verseEl) { setMenuState(null); return; }
+      const versiculoId = Number(verseEl.getAttribute("data-versiculo-id"));
+      setMenuState({ versiculoId, rect: range.getBoundingClientRect() });
+    }
+    const onScroll = () => setMenuState(null);
+    document.addEventListener("selectionchange", onSelectionChange);
+    window.addEventListener("scroll", onScroll, true);
+    return () => {
+      document.removeEventListener("selectionchange", onSelectionChange);
+      window.removeEventListener("scroll", onScroll, true);
+    };
+  }, []);
+
   // ── Cargar versículos ──
   const cargarVersiculos = useCallback(async (libroIdVal: string, capNum: string, ver?: string) => {
     if (!libroIdVal || !capNum) return;
@@ -203,6 +229,7 @@ export default function BibliaPage() {
       );
       setVersiculos(res.data.versiculos);
       setSecciones(res.data.secciones ?? []);
+      cargar(res.data.versiculos.map((v: Versiculo) => v.id));
     } finally {
       setLoadingVers(false);
     }
@@ -686,9 +713,21 @@ export default function BibliaPage() {
                       </p>
                     )}
                     <p
+                      data-versiculo-id={v.id}
                       ref={(el) => { versiculoRefs.current[v.numero] = el; }}
-                      onClick={() => copiarVersiculo(v)}
-                      title="Clic para copiar"
+                      onClick={() => {
+                        const sel = window.getSelection();
+                        if (sel && !sel.isCollapsed) return;
+                        copiarVersiculo(v);
+                      }}
+                      title="Clic para copiar · selecciona texto para resaltar"
+                      style={{
+                        backgroundColor: copiado === v.id || destacado
+                          ? undefined
+                          : resaltados[v.id]
+                            ? COLORES_RESALTADO[resaltados[v.id]].bg
+                            : undefined,
+                      }}
                       className={`font-lora ${FONT_SIZES[tamano].clase} rounded-md px-2 -mx-2 cursor-pointer transition-colors duration-500 ${
                         copiado === v.id ? "bg-[#4A6FA5]/10 text-[#4A6FA5]"
                           : destacado ? "bg-[#4A6FA5]/15 text-[#2C2C2C]"
@@ -740,6 +779,24 @@ export default function BibliaPage() {
           handleComparar={handleComparar}
           loadingComparar={loadingComparar}
           resultadosComparar={resultadosComparar}
+        />
+      )}
+
+      {menuState && (
+        <FloatingHighlightMenu
+          versiculoId={menuState.versiculoId}
+          rect={menuState.rect}
+          resaltadoActual={resaltados[menuState.versiculoId]}
+          onColor={(id, color) => {
+            guardar(id, color);
+            setMenuState(null);
+            window.getSelection()?.removeAllRanges();
+          }}
+          onQuitar={(id) => {
+            quitar(id);
+            setMenuState(null);
+            window.getSelection()?.removeAllRanges();
+          }}
         />
       )}
     </main>
