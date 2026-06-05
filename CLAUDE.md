@@ -116,7 +116,10 @@ bible-study-web/
 │       ├── analisis/route.ts
 │       ├── plan/
 │       │   ├── route.ts
-│       │   └── [id]/route.ts
+│       │   ├── [id]/route.ts
+│       │   ├── templates/route.ts       # GET — lista templates activos con fases (⏳ pendiente)
+│       │   ├── templates/[id]/route.ts  # GET — detalle template con fases + sesiones (⏳ pendiente)
+│       │   └── adoptar/route.ts         # POST — crea plan personal desde template (⏳ pendiente)
 │       ├── sesion/
 │       │   └── [id]/versiculos/route.ts # GET — versiculos(capitulo_numero) + secciones
 │       └── usuario/route.ts             # GET/PUT(nombre,version_biblica)/DELETE
@@ -183,6 +186,42 @@ bible_configuracion → clave (PK), valor, descripcion, updated_at
   -- Registros: version_disponible_1..4 (RV1909/RVR1960/NVI/TLA), idioma, modelo_llama
 ```
 
+**Tablas de templates de planes (inmutables del sistema + creables por usuario):**
+```sql
+bible_planes_templates          → id, titulo, descripcion, para_quien,
+                                  nivel ('principiante'|'intermedio'|'avanzado'|'completo'),
+                                  es_completo BOOLEAN,
+                                  duracion_estimada_dias INTEGER,
+                                  icono TEXT,        -- nombre Tabler: 'ti-map-2', 'ti-seedling', etc.
+                                  color_acento TEXT, -- 'info'|'warning'|'success'|'danger'
+                                  recomendado BOOLEAN,
+                                  creado_por ('sistema'|'usuario'),
+                                  id_usuario UUID,
+                                  activo BOOLEAN,
+                                  orden INTEGER
+
+bible_planes_templates_fases    → id, id_template, numero, titulo, descripcion, color_acento
+                                  -- color_acento: 'info'|'warning'|'success'|'danger'|'secondary'
+
+bible_planes_templates_sesiones → id, id_fase, orden,
+                                  abreviatura_libro TEXT,
+                                  capitulo_inicio INTEGER,
+                                  capitulo_fin INTEGER
+                                  -- Abstractas — sin IDs de versículos (se resuelven al adoptar)
+```
+
+**7 templates disponibles en Supabase:**
+
+| Orden | Título | Nivel | Días | Fases |
+|-------|--------|-------|------|-------|
+| 1 | Primera vez | principiante | ~90 | 3 |
+| 2 | Devocional diario | principiante | ~60 | 2 |
+| 3 | La vida de Jesús | principiante | ~89 | 4 |
+| 4 | Las enseñanzas de Jesús | principiante | ~73 | 3 |
+| 5 | Jesús y la iglesia | intermedio | ~138 | 5 |
+| 6 | La gran historia | completo | ~338 | 7 |
+| 7 | Cronológico | intermedio | ~338 | 9 |
+
 **RPC (Supabase SQL — ver `database/008_busqueda_sin_tildes.sql`):**
 ```sql
 buscar_versiculos_v2(termino TEXT, p_version TEXT)
@@ -219,6 +258,8 @@ buscar_versiculos_v2(termino TEXT, p_version TEXT)
 - **`capitulo_numero` en versículos:** `/api/estudio` y `/api/sesion/[id]/versiculos` hacen join con `bible_capitulos` para devolver el número de capítulo en cada verso — necesario para encabezados de capítulo sin queries extra
 - **`secciones` en los endpoints de versículos:** se consulta `bible_secciones` filtrando por `id_libro` + rango de capítulos (`gte`/`lte`) en paralelo con la query de versículos. El frontend hace `find()` por `capitulo + versiculo_inicio` para insertar el título antes del verso correcto
 - **`?version=` override en `/api/biblia/*`:** si el param está presente y es válido (`RV1909|RVR1960|NVI|TLA`), se usa directamente sin leer `bible_usuarios`; si no, cae al perfil del usuario. Permite cambio local de versión sin afectar configuración
+- **Versiones disponibles para selects UI:** obtener de `bible_configuracion` con `.like('clave', 'version_disponible_%')` — retorna RV1909, RVR1960, NVI, TLA
+- **`POST /api/plan/adoptar` — resolución de versículos:** las sesiones de un template son abstractas (abreviatura + capítulo). Al adoptar se resuelven a IDs reales: `versiculo_inicio_id` = primer versículo del `capitulo_inicio` (`v.numero = 1`); `versiculo_fin_id` = último versículo del `capitulo_fin` (`ORDER BY v.numero DESC LIMIT 1`). Se usa `Promise.all` en lotes para no serializar las ~338 sesiones de los templates más largos
 - **`/api/biblia/buscar`:** intenta RPC `buscar_versiculos_v2` (accent-insensitive via `unaccent`); si falla, cae a `ilike` básico con filtro en memoria por versión
 - **`/api/biblia/comparar`:** recibe `libro` (nombre), `capitulo` y `versiones` (CSV); busca el libro por `ilike` en cada versión, luego trae versículos y secciones en paralelo con `Promise.all`
 - **`parsearReferencia` en `/biblia`:** normaliza acentos con NFD+strip en ambos lados (input y nombres de libro) — `genesis`, `génesis` y `Génesis` resuelven al mismo libro; la longitud se preserva para slicear correctamente el texto original
@@ -252,6 +293,12 @@ Específico de `/biblia`:
 - **Highlight de versículo** — scroll automático + fondo azul 2.5s al navegar a versículo específico
 - **Prev/next capítulo** — flechas al pie con nombre del capítulo adyacente
 
+Específico de `/plan/templates` (⏳ pendiente):
+- **Cards agrupadas en 3 secciones:** "Para comenzar" (Primera vez, Devocional diario) · "La vida y enseñanzas de Jesús" (3 templates) · "Recorrido completo" (La gran historia —recomendado—, Cronológico)
+- **Cada card:** ícono Tabler, título, descripción, badges (nivel, días), botón "Comenzar este camino"
+- **Vista de detalle:** métricas (nivel, libros, sesiones, capítulos/día), descripción "para quién", lista de fases con libros y días estimados
+- **Modal de adopción:** selector de versión bíblica (default RVR1960), nombre del plan (pre-llenado, editable), botón "Crear mi plan" → `POST /api/plan/adoptar` → redirige a `/plan`
+
 Específico de `/configuracion`:
 - **Selector de versión bíblica** — 4 botones tipo radio (RV1909, RVR1960, NVI, TLA) con label + descripción; guarda inmediatamente via `PUT /api/usuario`; esta es la versión permanente del perfil
 
@@ -275,6 +322,7 @@ Específico de `/configuracion`:
 | D | Pills de versión local + lector compartido en `/biblia` | ✅ |
 | E | Autocomplete de libros + parser accent-insensitive | ✅ |
 | F | Panel comparativo multi-versión | ✅ |
+| G | Templates de planes (`/plan/templates`) | ⏳ Pendiente |
 
 ---
 
