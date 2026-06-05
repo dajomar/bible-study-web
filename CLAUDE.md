@@ -96,6 +96,8 @@ bible-study-web/
 │   ├── estudio/page.tsx
 │   ├── biblia/page.tsx
 │   ├── analisis/page.tsx
+│   ├── resaltados/page.tsx              # Versículos resaltados agrupados por testamento/libro
+│   ├── comparar/page.tsx                # Versículo exacto en las 4 versiones disponibles
 │   ├── plan/page.tsx
 │   ├── configuracion/page.tsx
 │   └── api/
@@ -114,18 +116,25 @@ bible-study-web/
 │       │   ├── buscar/route.ts          # GET — RPC accent-insensitive con fallback a ilike; acepta ?version=
 │       │   └── comparar/route.ts        # GET — mismo pasaje en múltiples versiones en paralelo
 │       ├── analisis/route.ts
+│       ├── resaltados/
+│       │   ├── route.ts                 # GET ?versiculos=1,2,3 · POST { id_versiculo, color }
+│       │   ├── [versiculoId]/route.ts   # DELETE — elimina resaltado del usuario autenticado
+│       │   └── todos/route.ts           # GET — todos los resaltados con join verso→cap→libro
 │       ├── plan/
 │       │   ├── route.ts
 │       │   ├── [id]/route.ts
-│       │   ├── templates/route.ts       # GET — lista templates activos con fases (⏳ pendiente)
-│       │   ├── templates/[id]/route.ts  # GET — detalle template con fases + sesiones (⏳ pendiente)
-│       │   └── adoptar/route.ts         # POST — crea plan personal desde template (⏳ pendiente)
+│       │   ├── templates/route.ts       # GET — lista templates activos con fases
+│       │   ├── templates/[id]/route.ts  # GET — detalle template con fases + librosMap
+│       │   └── adoptar/route.ts         # POST — crea plan personal desde template
 │       ├── sesion/
 │       │   └── [id]/versiculos/route.ts # GET — versiculos(capitulo_numero) + secciones
 │       └── usuario/route.ts             # GET/PUT(nombre,version_biblica)/DELETE
 ├── components/ui/
 │   ├── Nav.tsx
-│   └── NavWrapper.tsx
+│   ├── NavWrapper.tsx
+│   └── FloatingVerseMenu.tsx            # Menú flotante de acciones por versículo
+├── hooks/
+│   └── useResaltados.ts                 # Estado de resaltados con optimistic update
 ├── lib/
 │   ├── supabase.ts                      # SERVER ONLY
 │   ├── supabase-auth.ts                 # SERVER ONLY
@@ -184,6 +193,13 @@ bible_tareas      → id, id_sesion, id_analisis, id_usuario,
 -- Configuración global
 bible_configuracion → clave (PK), valor, descripcion, updated_at
   -- Registros: version_disponible_1..4 (RV1909/RVR1960/NVI/TLA), idioma, modelo_llama
+
+-- Resaltados de versículos por usuario
+bible_resaltados  → id SERIAL, id_usuario UUID (FK bible_usuarios), id_versiculo INT (FK bible_versiculos),
+                    color TEXT CHECK (color IN ('amarillo','verde','azul','rosa','naranja')),
+                    created_at TIMESTAMPTZ DEFAULT now()
+                    UNIQUE (id_usuario, id_versiculo)
+                    -- Script: database/009_resaltados.sql
 ```
 
 **Tablas de templates de planes (inmutables del sistema + creables por usuario):**
@@ -268,6 +284,11 @@ buscar_versiculos_v2(termino TEXT, p_version TEXT)
 - **Stats en `/api/usuario`:** 3 queries secuenciales (plan IDs → sesion IDs → count analisis) — Supabase JS no soporta subqueries en `.in()`
 - **Versículos en `/analisis`** lazy al expandir card, cacheados en `versiculosMap` y `seccionesMap` por `sesion.id`
 - **Nav** oculta en `/login` vía `NavWrapper` con `usePathname`
+- **`bible_resaltados` upsert:** usa `.upsert({ ... }, { onConflict: "id_usuario,id_versiculo" })` — permite cambiar el color de un resaltado existente sin error
+- **`useResaltados` hook:** estado compartido en `/estudio`, `/biblia`, `/analisis`. Optimistic update en `guardar` y `quitar`; rollback si la llamada a la API falla
+- **`/api/resaltados/todos`:** join en cadena `bible_resaltados → bible_versiculos → bible_capitulos → bible_libros` via nested select de Supabase JS; devuelve shape plano para el frontend
+- **`FloatingVerseMenu`:** menú flotante con dos vistas — acciones (Resaltar / Copiar / Compartir / Comparar) y selector de color. Se activa con clic en versículo (sin selección) o `mouseup` cuando hay texto seleccionado. `onMouseDown={(e) => e.preventDefault()}` preserva la selección activa mientras el menú está visible
+- **`/comparar`:** recibe `?libro=&capitulo=&versiculo=` — llama a `/api/biblia/comparar` para el capítulo completo y filtra al versículo exacto en cada versión. Muestra grid 2 columnas con tarjeta por versión
 
 ---
 
@@ -278,7 +299,8 @@ Consistentes en `/estudio`, `/analisis` y `/biblia`:
 - **Encabezado de capítulo** — `— Capítulo N —` en Lora/acento con líneas flanqueantes; aparece en el primer verso y en cada cambio de `id_capitulo`
 - **Título de sección** — Inter, uppercase, tracking-widest, acento; aparece antes del primer verso de cada sección según `bible_secciones`; solo visible en versiones con datos (RVR1960, NVI, TLA)
 - **A− / A+** — control de tamaño de texto en 3 niveles (`text-sm`, `text-base`, `text-lg`)
-- **Clic para copiar** — cualquier verso se copia con su referencia completa; feedback visual azul + "copiado"
+- **Menú flotante de versículo** (`FloatingVerseMenu`) — toque o selección de texto abre menú con: Resaltar (sub-panel de 5 colores), Copiar, Compartir, Comparar. Reemplaza el antiguo "clic para copiar"
+- **Resaltado de versículos** — fondo coloreado según `bible_resaltados`; 5 colores: amarillo, verde, azul, rosa, naranja. `COLORES_RESALTADO` exportado desde `FloatingVerseMenu.tsx` contiene `{ bg, fg, swatch }` por token
 - **Hover en versos** — fondo `#F0EDE8`
 - **Secciones de análisis colapsables** — accordion individual + "Colapsar todo / Expandir todo"
 - **Divisor centrado** — `— Análisis —` separa texto bíblico de análisis en `/estudio` y `/analisis`
@@ -322,7 +344,10 @@ Específico de `/configuracion`:
 | D | Pills de versión local + lector compartido en `/biblia` | ✅ |
 | E | Autocomplete de libros + parser accent-insensitive | ✅ |
 | F | Panel comparativo multi-versión | ✅ |
-| G | Templates de planes (`/plan/templates`) | ⏳ Pendiente |
+| G | Templates de planes (`/plan/templates`) | ✅ |
+| H | Resaltado de versículos + menú flotante | ✅ |
+| I | Página `/resaltados` (versículos marcados) | ✅ |
+| J | Página `/comparar` (versículo en todas las versiones) | ✅ |
 
 ---
 
