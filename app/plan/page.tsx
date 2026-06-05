@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import Link from "next/link";
 import apiClient from "@/lib/axios";
 
 interface Progreso { total: number; completadas: number; porcentaje: number }
@@ -77,12 +78,20 @@ export default function PlanPage() {
             {data.planes.length === 0 ? "Sin planes todavía" : `${data.planes.length} plan${data.planes.length !== 1 ? "es" : ""}`}
           </p>
         </div>
-        <button
-          onClick={() => setMostrarFormulario(true)}
-          className="shrink-0 bg-[#4A6FA5] text-white font-inter text-sm px-4 py-2.5 rounded-lg hover:bg-[#3d5f8f] transition-colors"
-        >
-          Nuevo plan
-        </button>
+        <div className="flex gap-2">
+          <Link
+            href="/plan/templates"
+            className="shrink-0 border border-[#4A6FA5] text-[#4A6FA5] font-inter text-sm px-4 py-2.5 rounded-lg hover:bg-[#F0EDE8] transition-colors"
+          >
+            Ver plantillas
+          </Link>
+          <button
+            onClick={() => setMostrarFormulario(true)}
+            className="shrink-0 bg-[#4A6FA5] text-white font-inter text-sm px-4 py-2.5 rounded-lg hover:bg-[#3d5f8f] transition-colors"
+          >
+            Nuevo plan
+          </button>
+        </div>
       </div>
 
       {mostrarFormulario && (
