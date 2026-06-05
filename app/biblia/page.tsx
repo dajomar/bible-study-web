@@ -22,6 +22,12 @@ interface Versiculo {
   texto: string;
 }
 
+const FONT_SIZES = [
+  { label: "A", clase: "text-sm leading-7" },
+  { label: "A", clase: "text-base leading-8" },
+  { label: "A", clase: "text-lg leading-9" },
+];
+
 export default function BibliaPage() {
   const [libros, setLibros] = useState<Libro[]>([]);
   const [capitulos, setCapitulos] = useState<Capitulo[]>([]);
@@ -34,11 +40,28 @@ export default function BibliaPage() {
   const [loadingCaps, setLoadingCaps] = useState(false);
   const [loadingVers, setLoadingVers] = useState(false);
 
+  const [tamano, setTamano] = useState(1); // índice en FONT_SIZES
+  const [copiado, setCopiado] = useState<number | null>(null); // id del versículo copiado
+
   useEffect(() => {
     apiClient
       .get<{ libros: Libro[] }>("/api/biblia/libros")
       .then((res) => setLibros(res.data.libros))
       .finally(() => setLoadingLibros(false));
+  }, []);
+
+  const cargarVersiculos = useCallback(async (libroIdVal: string, capNum: string) => {
+    if (!libroIdVal || !capNum) return;
+    setLoadingVers(true);
+    setVersiculos([]);
+    try {
+      const res = await apiClient.get<{ versiculos: Versiculo[] }>(
+        `/api/biblia?libro_id=${libroIdVal}&capitulo=${capNum}`
+      );
+      setVersiculos(res.data.versiculos);
+    } finally {
+      setLoadingVers(false);
+    }
   }, []);
 
   const handleLibroChange = useCallback(async (id: string) => {
@@ -58,23 +81,38 @@ export default function BibliaPage() {
 
   const handleCapituloChange = useCallback(async (num: string) => {
     setCapituloNum(num);
-    setVersiculos([]);
-    if (!num || !libroId) return;
+    await cargarVersiculos(libroId, num);
+  }, [libroId, cargarVersiculos]);
 
-    setLoadingVers(true);
+  function navCapitulo(delta: number) {
+    const actual = Number(capituloNum);
+    const siguiente = actual + delta;
+    if (siguiente < 1 || siguiente > capitulos.length) return;
+    const num = String(siguiente);
+    setCapituloNum(num);
+    cargarVersiculos(libroId, num);
+  }
+
+  async function copiarVersiculo(v: Versiculo) {
+    const libro = libros.find((l) => String(l.id) === libroId);
+    const referencia = libro ? `${libro.nombre} ${capituloNum}:${v.numero}` : "";
+    const texto = referencia ? `${v.texto} — ${referencia}` : v.texto;
     try {
-      const res = await apiClient.get<{ versiculos: Versiculo[] }>(
-        `/api/biblia?libro_id=${libroId}&capitulo=${num}`
-      );
-      setVersiculos(res.data.versiculos);
-    } finally {
-      setLoadingVers(false);
+      await navigator.clipboard.writeText(texto);
+      setCopiado(v.id);
+      setTimeout(() => setCopiado(null), 1800);
+    } catch {
+      // clipboard no disponible
     }
-  }, [libroId]);
+  }
 
   const libroSeleccionado = libros.find((l) => String(l.id) === libroId);
   const antiguoTestamento = libros.filter((l) => l.testamento === "Antiguo");
   const nuevoTestamento = libros.filter((l) => l.testamento === "Nuevo");
+
+  const capActual = Number(capituloNum);
+  const hayAnterior = capActual > 1;
+  const haySiguiente = capActual > 0 && capActual < capitulos.length;
 
   return (
     <main className="max-w-3xl mx-auto px-4 md:px-6 py-8 md:py-12">
@@ -85,8 +123,8 @@ export default function BibliaPage() {
         </p>
       </div>
 
-      {/* Controles — apilados en móvil, en fila en desktop */}
-      <div className="flex flex-col sm:flex-row gap-3 mb-8 md:mb-10">
+      {/* Controles */}
+      <div className="flex flex-col sm:flex-row gap-3 mb-4">
         <div className="flex-1">
           <label className="block font-inter text-xs text-[#8A8A8A] uppercase tracking-wide mb-1.5">
             Libro
@@ -136,12 +174,40 @@ export default function BibliaPage() {
         </div>
       </div>
 
-      {/* Encabezado del pasaje */}
+      {/* Encabezado del pasaje + controles de tamaño */}
       {libroSeleccionado && capituloNum && (
-        <div className="mb-6 pb-4 border-b border-[#E8E4DF]">
-          <h2 className="font-lora text-xl text-[#2C2C2C]">
-            {libroSeleccionado.nombre} {capituloNum}
-          </h2>
+        <div className="flex items-center justify-between mb-6 pb-4 border-b border-[#E8E4DF]">
+          <div>
+            <h2 className="font-lora text-xl text-[#2C2C2C]">
+              {libroSeleccionado.nombre} {capituloNum}
+            </h2>
+            {versiculos.length > 0 && (
+              <p className="font-inter text-xs text-[#8A8A8A] mt-0.5">
+                {versiculos.length} versículos
+              </p>
+            )}
+          </div>
+
+          {/* Control de tamaño de texto */}
+          <div className="flex items-center gap-1 border border-[#E8E4DF] rounded-lg overflow-hidden">
+            <button
+              onClick={() => setTamano((t) => Math.max(0, t - 1))}
+              disabled={tamano === 0}
+              className="px-3 py-2 font-inter text-xs text-[#8A8A8A] hover:bg-[#F0EDE8] transition-colors disabled:opacity-30"
+              title="Reducir texto"
+            >
+              A−
+            </button>
+            <div className="w-px h-5 bg-[#E8E4DF]" />
+            <button
+              onClick={() => setTamano((t) => Math.min(FONT_SIZES.length - 1, t + 1))}
+              disabled={tamano === FONT_SIZES.length - 1}
+              className="px-3 py-2 font-inter text-sm text-[#8A8A8A] hover:bg-[#F0EDE8] transition-colors disabled:opacity-30"
+              title="Aumentar texto"
+            >
+              A+
+            </button>
+          </div>
         </div>
       )}
 
@@ -159,13 +225,45 @@ export default function BibliaPage() {
       )}
 
       {!loadingVers && versiculos.length > 0 && (
-        <div className="space-y-1">
+        <div className="space-y-0.5">
           {versiculos.map((v) => (
-            <p key={v.id} className="font-lora text-base md:text-[1.05rem] leading-8 text-[#2C2C2C]">
+            <p
+              key={v.id}
+              onClick={() => copiarVersiculo(v)}
+              title="Clic para copiar"
+              className={`font-lora ${FONT_SIZES[tamano].clase} text-[#2C2C2C] rounded-md px-2 -mx-2 cursor-pointer transition-colors ${
+                copiado === v.id
+                  ? "bg-[#4A6FA5]/10 text-[#4A6FA5]"
+                  : "hover:bg-[#F0EDE8]"
+              }`}
+            >
               <span className="text-[#8A8A8A] text-xs align-super mr-1.5 font-inter">{v.numero}</span>
               {v.texto}
+              {copiado === v.id && (
+                <span className="ml-2 font-inter text-xs text-[#4A6FA5] not-italic">copiado</span>
+              )}
             </p>
           ))}
+        </div>
+      )}
+
+      {/* Navegación prev/next */}
+      {capituloNum && !loadingVers && (
+        <div className="flex items-center justify-between mt-10 pt-6 border-t border-[#E8E4DF]">
+          <button
+            onClick={() => navCapitulo(-1)}
+            disabled={!hayAnterior}
+            className="flex items-center gap-2 font-inter text-sm text-[#4A6FA5] hover:text-[#3d5f8f] disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+          >
+            ← {hayAnterior ? `${libroSeleccionado?.nombre} ${capActual - 1}` : ""}
+          </button>
+          <button
+            onClick={() => navCapitulo(1)}
+            disabled={!haySiguiente}
+            className="flex items-center gap-2 font-inter text-sm text-[#4A6FA5] hover:text-[#3d5f8f] disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+          >
+            {haySiguiente ? `${libroSeleccionado?.nombre} ${capActual + 1}` : ""} →
+          </button>
         </div>
       )}
 
