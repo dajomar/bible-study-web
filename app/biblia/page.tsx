@@ -412,6 +412,15 @@ export default function BibliaPage() {
           {/* Versículos */}
           {!loadingVers && versiculos.length > 0 && (
             <div className="space-y-0.5">
+              {/* Encabezado del capítulo */}
+              <div className="flex items-center gap-3 mb-4">
+                <div className="flex-1 h-px bg-[#E8E4DF]" />
+                <p className="font-lora text-sm text-[#4A6FA5] tracking-wide">
+                  Capítulo {capituloNum}
+                </p>
+                <div className="flex-1 h-px bg-[#E8E4DF]" />
+              </div>
+
               {versiculos.map((v) => {
                 const destacado = versiculoDestacado === v.numero;
                 return (
