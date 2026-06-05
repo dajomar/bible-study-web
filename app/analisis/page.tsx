@@ -35,6 +35,12 @@ interface Versiculo {
   id_capitulo: number;
 }
 
+const FONT_SIZES = [
+  "text-sm leading-7",
+  "text-base leading-8",
+  "text-lg leading-9",
+];
+
 function buildReferencia(sesion: SesionInfo): string {
   const ini = sesion.inicio;
   const fin = sesion.fin;
@@ -60,6 +66,8 @@ export default function AnalisisPage() {
   const [abierto, setAbierto] = useState<number | null>(null);
   const [versiculosMap, setVersiculosMap] = useState<Record<number, Versiculo[]>>({});
   const [loadingVers, setLoadingVers] = useState<number | null>(null);
+  const [tamano, setTamano] = useState(1);
+  const [copiado, setCopiad] = useState<number | null>(null);
 
   useEffect(() => {
     apiClient
@@ -70,16 +78,8 @@ export default function AnalisisPage() {
 
   async function toggle(analisis: Analisis) {
     const { id, sesion } = analisis;
-
-    // Cerrar si ya está abierto
-    if (abierto === id) {
-      setAbierto(null);
-      return;
-    }
-
+    if (abierto === id) { setAbierto(null); return; }
     setAbierto(id);
-
-    // Cargar versículos solo si no los tenemos ya
     if (!versiculosMap[sesion.id]) {
       setLoadingVers(id);
       try {
@@ -90,6 +90,18 @@ export default function AnalisisPage() {
       } finally {
         setLoadingVers(null);
       }
+    }
+  }
+
+  async function copiarVersiculo(v: Versiculo, referencia: string) {
+    const base = referencia.includes("–") ? referencia.split("–")[0].trimEnd() : referencia.split(":")[0];
+    const textoCopia = `${v.texto} — ${base}:${v.numero}`;
+    try {
+      await navigator.clipboard.writeText(textoCopia);
+      setCopiad(v.id);
+      setTimeout(() => setCopiad(null), 1800);
+    } catch {
+      // clipboard no disponible
     }
   }
 
@@ -165,9 +177,33 @@ export default function AnalisisPage() {
                   <div className="border-t border-[#E8E4DF]">
                     {/* Texto bíblico */}
                     <div className="px-4 md:px-6 py-6 border-b border-[#E8E4DF]">
-                      <p className="font-inter text-xs text-[#8A8A8A] uppercase tracking-wide mb-4">
-                        Texto — {referencia}
-                      </p>
+                      <div className="flex items-center justify-between mb-4">
+                        <div>
+                          <p className="font-inter text-xs text-[#8A8A8A] uppercase tracking-wide">Texto</p>
+                          {!cargandoVers && versiculos.length > 0 && (
+                            <p className="font-inter text-xs text-[#8A8A8A] mt-0.5">{versiculos.length} versículos</p>
+                          )}
+                        </div>
+                        <div className="flex items-center gap-1 border border-[#E8E4DF] rounded-lg overflow-hidden">
+                          <button
+                            onClick={(e) => { e.stopPropagation(); setTamano((t) => Math.max(0, t - 1)); }}
+                            disabled={tamano === 0}
+                            className="px-3 py-1.5 font-inter text-xs text-[#8A8A8A] hover:bg-[#F0EDE8] transition-colors disabled:opacity-30"
+                            title="Reducir texto"
+                          >
+                            A−
+                          </button>
+                          <div className="w-px h-4 bg-[#E8E4DF]" />
+                          <button
+                            onClick={(e) => { e.stopPropagation(); setTamano((t) => Math.min(FONT_SIZES.length - 1, t + 1)); }}
+                            disabled={tamano === FONT_SIZES.length - 1}
+                            className="px-3 py-1.5 font-inter text-sm text-[#8A8A8A] hover:bg-[#F0EDE8] transition-colors disabled:opacity-30"
+                            title="Aumentar texto"
+                          >
+                            A+
+                          </button>
+                        </div>
+                      </div>
 
                       {cargandoVers && (
                         <div className="space-y-2">
@@ -186,50 +222,34 @@ export default function AnalisisPage() {
                           {versiculos.map((v) => (
                             <p
                               key={v.id}
-                              className="font-lora text-base leading-8 text-[#2C2C2C]"
+                              onClick={(e) => { e.stopPropagation(); copiarVersiculo(v, referencia); }}
+                              title="Clic para copiar"
+                              className={`font-lora ${FONT_SIZES[tamano]} text-[#2C2C2C] rounded-md px-2 -mx-2 cursor-pointer transition-colors ${
+                                copiado === v.id
+                                  ? "bg-[#4A6FA5]/10 text-[#4A6FA5]"
+                                  : "hover:bg-[#F0EDE8]"
+                              }`}
                             >
-                              <span className="text-[#8A8A8A] text-xs align-super mr-1 font-inter">
-                                {v.numero}
-                              </span>
+                              <span className="text-[#8A8A8A] text-xs align-super mr-1 font-inter">{v.numero}</span>
                               {v.texto}
+                              {copiado === v.id && (
+                                <span className="ml-2 font-inter text-xs text-[#4A6FA5] not-italic">copiado</span>
+                              )}
                             </p>
                           ))}
                         </div>
                       )}
                     </div>
 
-                    {/* Análisis */}
-                    <div className="px-4 md:px-6 py-6">
-                      <div className="flex items-center justify-between mb-6">
-                        <p className="font-inter text-xs text-[#8A8A8A] uppercase tracking-wide">
-                          Análisis
-                        </p>
-                        <span className="font-inter text-xs text-[#8A8A8A] bg-[#FAF8F5] border border-[#E8E4DF] px-2 py-1 rounded-full">
-                          {a.modelo_usado}
-                        </span>
-                      </div>
-
-                      <div className="space-y-7">
-                        {[
-                          { label: "Contexto histórico", texto: a.contexto_historico },
-                          { label: "Resumen del pasaje", texto: a.resumen },
-                          { label: "Temas principales", texto: a.temas_principales },
-                          { label: "Conexiones bíblicas", texto: a.conexiones },
-                          { label: "Preguntas para reflexión", texto: a.preguntas_reflexion },
-                        ]
-                          .filter((s) => s.texto)
-                          .map(({ label, texto }) => (
-                            <div key={label}>
-                              <h3 className="font-inter text-xs text-[#8A8A8A] uppercase tracking-wide mb-3">
-                                {label}
-                              </h3>
-                              <p className="font-inter text-sm text-[#2C2C2C] leading-7 whitespace-pre-line">
-                                {texto}
-                              </p>
-                            </div>
-                          ))}
-                      </div>
+                    {/* Divisor */}
+                    <div className="flex items-center gap-4 px-4 md:px-6 py-4 border-b border-[#E8E4DF]">
+                      <div className="flex-1 h-px bg-[#E8E4DF]" />
+                      <span className="font-inter text-xs text-[#8A8A8A] uppercase tracking-widest">Análisis</span>
+                      <div className="flex-1 h-px bg-[#E8E4DF]" />
                     </div>
+
+                    {/* Secciones de análisis colapsables */}
+                    <AnalisisSecciones analisis={a} />
                   </div>
                 )}
               </div>
@@ -238,5 +258,64 @@ export default function AnalisisPage() {
         </div>
       )}
     </main>
+  );
+}
+
+function AnalisisSecciones({ analisis }: { analisis: Analisis }) {
+  const secciones = [
+    { label: "Contexto histórico", texto: analisis.contexto_historico },
+    { label: "Resumen del pasaje", texto: analisis.resumen },
+    { label: "Temas principales", texto: analisis.temas_principales },
+    { label: "Conexiones bíblicas", texto: analisis.conexiones },
+    { label: "Preguntas para reflexión", texto: analisis.preguntas_reflexion },
+  ].filter((s) => s.texto);
+
+  const [abiertos, setAbiertos] = useState<Record<string, boolean>>(
+    Object.fromEntries(secciones.map((s) => [s.label, true]))
+  );
+
+  function toggle(label: string) {
+    setAbiertos((prev) => ({ ...prev, [label]: !prev[label] }));
+  }
+
+  const algunoAbierto = secciones.some((s) => abiertos[s.label]);
+
+  return (
+    <div className="px-4 md:px-6 py-5">
+      <div className="flex items-center justify-between mb-4">
+        <span className="font-inter text-xs text-[#8A8A8A] bg-[#FAF8F5] border border-[#E8E4DF] px-2 py-1 rounded-full">
+          {analisis.modelo_usado}
+        </span>
+        <button
+          onClick={() => setAbiertos(Object.fromEntries(secciones.map((s) => [s.label, !algunoAbierto])))}
+          className="font-inter text-xs text-[#8A8A8A] hover:text-[#2C2C2C] transition-colors"
+        >
+          {algunoAbierto ? "Colapsar todo" : "Expandir todo"}
+        </button>
+      </div>
+
+      <div className="space-y-2">
+        {secciones.map(({ label, texto }) => (
+          <div key={label} className="border border-[#E8E4DF] rounded-xl overflow-hidden">
+            <button
+              onClick={() => toggle(label)}
+              className="w-full flex items-center justify-between px-5 py-4 hover:bg-[#FAF8F5] transition-colors"
+            >
+              <h3 className="font-inter text-xs text-[#8A8A8A] uppercase tracking-wide">{label}</h3>
+              <span className={`font-inter text-xs text-[#8A8A8A] transition-transform ${abiertos[label] ? "rotate-180" : ""}`}>
+                ▾
+              </span>
+            </button>
+            {abiertos[label] && (
+              <div className="px-5 pb-5 border-t border-[#E8E4DF]">
+                <p className="font-inter text-sm text-[#2C2C2C] leading-7 whitespace-pre-line pt-4">
+                  {texto}
+                </p>
+              </div>
+            )}
+          </div>
+        ))}
+      </div>
+    </div>
   );
 }
