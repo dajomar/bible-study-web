@@ -79,7 +79,6 @@ Hover:             #F0EDE8  (crema oscuro)
 **Principios:**
 - Mucho espacio en blanco — no saturar la pantalla
 - Radios suaves (rounded-lg, rounded-xl)
-- Sombras casi imperceptibles (shadow-sm)
 - Sin animaciones llamativas
 - Priorizar el texto sobre los elementos decorativos
 - `max-w-3xl` como ancho de contenido estándar en todas las páginas
@@ -91,55 +90,46 @@ Hover:             #F0EDE8  (crema oscuro)
 ```
 bible-study-web/
 ├── app/
-│   ├── layout.tsx                       # Layout raíz con fuentes y nav
+│   ├── layout.tsx
 │   ├── page.tsx                         # Dashboard (ruta /)
-│   ├── login/
-│   │   └── page.tsx                     # Login / registro
-│   ├── estudio/
-│   │   └── page.tsx                     # Estudio del día
-│   ├── biblia/
-│   │   └── page.tsx                     # Lector de Biblia
-│   ├── analisis/
-│   │   └── page.tsx                     # Historial de análisis
-│   ├── plan/
-│   │   └── page.tsx                     # Gestión del plan
-│   ├── configuracion/
-│   │   └── page.tsx                     # Perfil, contraseña, zona de peligro
+│   ├── login/page.tsx
+│   ├── estudio/page.tsx
+│   ├── biblia/page.tsx
+│   ├── analisis/page.tsx
+│   ├── plan/page.tsx
+│   ├── configuracion/page.tsx
 │   └── api/
 │       ├── auth/
-│       │   ├── login/route.ts           # POST — inicia sesión
-│       │   ├── registro/route.ts        # POST — crea usuario (admin.createUser, sin email)
-│       │   ├── logout/route.ts          # POST — cierra sesión
-│       │   └── cambiar-password/route.ts# POST — verifica pass actual, actualiza con admin API
-│       ├── dashboard/route.ts           # GET — sesión del día, progreso, tareas pendientes
+│       │   ├── login/route.ts
+│       │   ├── registro/route.ts        # admin.createUser — sin email, sin rate limit
+│       │   ├── logout/route.ts
+│       │   └── cambiar-password/route.ts
+│       ├── dashboard/route.ts
 │       ├── estudio/
-│       │   ├── route.ts                 # GET — sesión activa + versículos (con capitulo_numero) + análisis
-│       │   └── completar/route.ts       # POST — marca sesión completada con timestamp
+│       │   ├── route.ts                 # GET — sesión + versiculos(capitulo_numero) + secciones + analisis
+│       │   └── completar/route.ts
 │       ├── biblia/
-│       │   ├── libros/route.ts          # GET — 66 libros ordenados por testamento
-│       │   ├── route.ts                 # GET — capítulos (libro_id) o versículos (libro_id + capitulo)
-│       │   └── buscar/route.ts          # GET — búsqueda full-text con ilike, limit 30
-│       ├── analisis/route.ts            # GET — historial de análisis del usuario
+│       │   ├── libros/route.ts          # GET — filtra por version_biblica del usuario
+│       │   ├── route.ts                 # GET — caps o versiculos + secciones, filtra por version
+│       │   └── buscar/route.ts          # GET — full-text ilike, filtra por version, limit 30
+│       ├── analisis/route.ts
 │       ├── plan/
-│       │   ├── route.ts                 # GET — planes + sesiones del activo; POST — crear plan
-│       │   └── [id]/route.ts            # PUT — activar/desactivar plan
+│       │   ├── route.ts
+│       │   └── [id]/route.ts
 │       ├── sesion/
-│       │   └── [id]/versiculos/route.ts # GET — versículos de sesión (con capitulo_numero)
-│       └── usuario/route.ts             # GET — perfil + stats; PUT — nombre; DELETE — eliminar cuenta
-├── components/
-│   └── ui/
-│       ├── Nav.tsx                      # Nav responsiva: hamburger móvil, horizontal desktop
-│       └── NavWrapper.tsx               # Oculta Nav en /login
+│       │   └── [id]/versiculos/route.ts # GET — versiculos(capitulo_numero) + secciones
+│       └── usuario/route.ts             # GET/PUT(nombre,version_biblica)/DELETE
+├── components/ui/
+│   ├── Nav.tsx
+│   └── NavWrapper.tsx
 ├── lib/
-│   ├── supabase.ts                      # Cliente admin con service role — SERVER ONLY
-│   ├── supabase-auth.ts                 # Cliente SSR con cookies — SERVER ONLY
-│   ├── axios.ts                         # Instancia Axios con NEXT_PUBLIC_API_BASE_URL
-│   └── utils.ts                         # Helpers generales
-├── middleware.ts                        # Protege rutas; PUBLIC_PATHS = ["/login", "/api/auth"]
-├── types/
-│   └── index.ts                         # Tipos TypeScript de todas las entidades
+│   ├── supabase.ts                      # SERVER ONLY
+│   ├── supabase-auth.ts                 # SERVER ONLY
+│   ├── axios.ts
+│   └── utils.ts
+├── middleware.ts                        # PUBLIC_PATHS = ["/login", "/api/auth"]
+├── types/index.ts
 ├── database/                            # Scripts SQL — fuente de verdad del esquema
-├── CLAUDE.md
 └── .env.local
 ```
 
@@ -149,30 +139,33 @@ bible-study-web/
 
 **Desarrollo (`.env.local`):**
 ```
-SUPABASE_URL=                       # URL del proyecto Supabase
+SUPABASE_URL=
 SUPABASE_SERVICE_ROLE_KEY=          # NUNCA en NEXT_PUBLIC_
 NEXT_PUBLIC_API_BASE_URL=http://localhost:3000
 ```
 
 **Producción (Vercel):**
 ```
-SUPABASE_URL=                       # igual que local
-SUPABASE_SERVICE_ROLE_KEY=          # igual que local
+SUPABASE_URL=
+SUPABASE_SERVICE_ROLE_KEY=
 NEXT_PUBLIC_API_BASE_URL=https://bible-study-web-mocha.vercel.app
 ```
 
 ---
 
-## Base de datos — esquema real (de los scripts SQL)
+## Base de datos — esquema completo
 
 ```sql
 -- Contenido bíblico (inmutable)
-bible_libros      → id, orden, nombre, abreviatura, testamento, created_at
+bible_libros      → id, orden, nombre, abreviatura, testamento, version, created_at
+                    UNIQUE(orden, version), UNIQUE(abreviatura, version)
 bible_capitulos   → id, id_libro, numero, created_at
 bible_versiculos  → id, id_capitulo, numero, texto, created_at
+bible_secciones   → id, id_libro, capitulo, versiculo_inicio, titulo, created_at
+                    UNIQUE(id_libro, capitulo, versiculo_inicio)
 
 -- Usuarios y planes
-bible_usuarios    → id (UUID), email, nombre, created_at
+bible_usuarios    → id (UUID), email, nombre, version_biblica, created_at
 bible_planes      → id, id_usuario, nombre, descripcion, activo, created_at
 bible_sesiones    → id, id_plan, orden, versiculo_inicio_id, versiculo_fin_id,
                     fecha_programada, fecha_completada, completada, created_at
@@ -183,69 +176,86 @@ bible_analisis    → id, id_sesion, contexto_historico, resumen, temas_principa
                     tokens_usados, duracion_segundos, created_at
 bible_tareas      → id, id_sesion, id_analisis, id_usuario,
                     descripcion, origen ('llama'|'usuario'), completada, notas, created_at
+
+-- Configuración global
+bible_configuracion → clave (PK), valor, descripcion, updated_at
+  -- Registros: version_disponible_1..4 (RV1909/RVR1960/NVI/TLA), idioma, modelo_llama
 ```
 
-**Notas importantes del esquema:**
-- `temas_principales` y `preguntas_reflexion` son `TEXT` (no arrays) — el agente escribe texto libre
-- `bible_usuarios.id` debe coincidir con el UID de Supabase Auth para vincular auth ↔ datos
+**Versiones bíblicas disponibles:**
+
+| Versión  | Versículos | Secciones |
+|----------|------------|-----------|
+| RV1909   | ~31 000    | No        |
+| RVR1960  | ~31 000    | Sí        |
+| NVI      | ~31 000    | Sí        |
+| TLA      | ~26 000    | Sí        |
+
+**Notas importantes:**
+- `bible_usuarios.version_biblica` controla qué versión ve el usuario en el lector — default `'RVR1960'`
+- `bible_libros.version` filtra todo el contenido bíblico — los constraints UNIQUE incluyen `version`
+- `bible_secciones` se obtiene via JOIN con `bible_libros.version` — no hay columna `version` directa en la tabla
+- Las sesiones (planes de estudio) están pinadas a IDs de versículos de cuando se creó el plan — cambiar `version_biblica` no afecta `/estudio` ni `/analisis`, solo al lector libre `/biblia`
 - `bible_tareas.origen` tiene CHECK constraint: solo `'llama'` o `'usuario'`
-- CASCADE DELETE en `bible_usuarios` elimina planes, sesiones, análisis y tareas en cadena
+- CASCADE DELETE en `bible_usuarios` elimina planes, sesiones, análisis y tareas
 
 ---
 
 ## Decisiones técnicas relevantes
 
-- **`auth.admin.createUser({ email_confirm: true })`** en registro — evita envío de email y rate limits
+- **`auth.admin.createUser({ email_confirm: true })`** — evita envío de email y rate limits
 - **Middleware `PUBLIC_PATHS`** incluye `"/login"` y `"/api/auth"` — sin esto las rutas de auth quedan bloqueadas
 - **Verso range en sesiones:** mismo capítulo → rango por `numero`; distinto capítulo → rango por `id`
-- **`capitulo_numero` en versículos:** `/api/estudio` y `/api/sesion/[id]/versiculos` hacen join con `bible_capitulos` para devolver el número de capítulo en cada verso — necesario para mostrar encabezados de capítulo en el frontend sin queries extra
-- **Stats en `/api/usuario`:** 3 queries secuenciales (plan IDs → sesion IDs → count analisis) porque Supabase JS no soporta subqueries en `.in()`
-- **Versículos en `/analisis`** cargados lazy al expandir card, cacheados en `versiculosMap` por `sesion.id`
-- **Nav** se oculta en `/login` vía `NavWrapper` con `usePathname`
+- **`capitulo_numero` en versículos:** `/api/estudio` y `/api/sesion/[id]/versiculos` hacen join con `bible_capitulos` para devolver el número de capítulo en cada verso — necesario para encabezados de capítulo sin queries extra
+- **`secciones` en los endpoints de versículos:** se consulta `bible_secciones` filtrando por `id_libro` + rango de capítulos (`gte`/`lte`) en paralelo con la query de versículos. El frontend hace `find()` por `capitulo + versiculo_inicio` para insertar el título antes del verso correcto
+- **Filtrado por versión en `/api/biblia`:** todos los endpoints verifican `bible_usuarios.version_biblica` del usuario autenticado antes de servir libros, capítulos, versículos o resultados de búsqueda
+- **Búsqueda full-text `/api/biblia/buscar`:** Supabase no permite `.eq()` sobre relaciones anidadas, por eso busca con `limit 60` y filtra en memoria por `libro.version` para devolver 30 resultados de la versión correcta
+- **Stats en `/api/usuario`:** 3 queries secuenciales (plan IDs → sesion IDs → count analisis) — Supabase JS no soporta subqueries en `.in()`
+- **Versículos en `/analisis`** lazy al expandir card, cacheados en `versiculosMap` y `seccionesMap` por `sesion.id`
+- **Nav** oculta en `/login` vía `NavWrapper` con `usePathname`
 
 ---
 
 ## Patrones de UI compartidos
 
-Estos patrones son consistentes en `/estudio`, `/analisis` y `/biblia`:
+Consistentes en `/estudio`, `/analisis` y `/biblia`:
 
-- **Encabezado de capítulo** — `— Capítulo N —` en Lora/acento con líneas flanqueantes antes del primer verso y en cada cambio de `id_capitulo`
+- **Encabezado de capítulo** — `— Capítulo N —` en Lora/acento con líneas flanqueantes; aparece en el primer verso y en cada cambio de `id_capitulo`
+- **Título de sección** — Inter, uppercase, tracking-widest, acento; aparece antes del primer verso de cada sección según `bible_secciones`; solo visible en versiones con datos (RVR1960, NVI, TLA)
 - **A− / A+** — control de tamaño de texto en 3 niveles (`text-sm`, `text-base`, `text-lg`)
-- **Clic para copiar** — cualquier verso se copia con su referencia completa al portapapeles; feedback visual azul + "copiado"
-- **Hover en versos** — fondo `#F0EDE8` al pasar el ratón
+- **Clic para copiar** — cualquier verso se copia con su referencia completa; feedback visual azul + "copiado"
+- **Hover en versos** — fondo `#F0EDE8`
 - **Secciones de análisis colapsables** — accordion individual + "Colapsar todo / Expandir todo"
 - **Divisor centrado** — `— Análisis —` separa texto bíblico de análisis en `/estudio` y `/analisis`
 
 Específico de `/biblia`:
-- **Barra de referencia inteligente** — parsea `Juan 3:16`, `Gén 1`, `Sal 23:1` etc. contra nombres y abreviaturas de libros
-- **Highlight de versículo** — scroll automático + fondo azul suave 2.5s al navegar a versículo específico
-- **Búsqueda full-text** — tab "Buscar texto" → `GET /api/biblia/buscar?q=` con `ilike`, resultados con término resaltado, clic navega al versículo
-- **Explorar por libro** — dropdowns colapsados bajo toggle, disponibles como flujo alternativo
+- **Barra de referencia inteligente** — parsea `Juan 3:16`, `Gén 1`, `Sal 23:1` etc. contra nombres y abreviaturas
+- **Highlight de versículo** — scroll automático + fondo azul 2.5s al navegar a versículo específico
+- **Búsqueda full-text** — tab "Buscar texto", resultados con término resaltado, clic navega al versículo
+- **Explorar por libro** — dropdowns colapsados como flujo alternativo
 - **Prev/next capítulo** — flechas al pie con nombre del capítulo adyacente
+- **Badge de versión** — muestra la versión activa (RVR1960, NVI…) junto al título
+
+Específico de `/configuracion`:
+- **Selector de versión bíblica** — 4 botones tipo radio (RV1909, RVR1960, NVI, TLA) con label + descripción; guarda inmediatamente via `PUT /api/usuario`
 
 ---
 
-## Estado del proyecto — COMPLETADO ✅
+## Estado del proyecto
 
-| Fase | Sección | Estado |
-|------|---------|--------|
+| Fase | Descripción | Estado |
+|------|-------------|--------|
 | 0 | Autenticación | ✅ |
 | 1 | Layout y Nav responsiva | ✅ |
-| 2 | Dashboard (`/`) | ✅ |
+| 2 | Dashboard | ✅ |
 | 3 | Estudio (`/estudio`) | ✅ |
-| 4 | Biblia (`/biblia`) | ✅ |
+| 4 | Lector (`/biblia`) | ✅ |
 | 5 | Análisis (`/analisis`) | ✅ |
 | 6 | Plan (`/plan`) | ✅ |
 | 7 | Configuración (`/configuracion`) | ✅ |
-
-Extras sobre el plan original:
-- Cambio de contraseña con verificación de contraseña actual
-- Zona de peligro (eliminar cuenta con confirmación por texto)
-- Diseño completamente responsive (móvil + desktop)
-- Texto bíblico inline en `/analisis` con carga lazy
-- Mejoras de lector: A−/A+, copia de versículos, hover, encabezados de capítulo
-- Búsqueda full-text en `/biblia` + barra de referencia inteligente con highlight
-- Dashboard con saludo dinámico y stats de progreso mejoradas
+| A | Selector de versión bíblica | ✅ |
+| B | Filtrado por versión en `/biblia` | ✅ |
+| C | Títulos de sección (`bible_secciones`) | ✅ |
 
 ---
 
