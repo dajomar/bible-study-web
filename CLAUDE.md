@@ -109,9 +109,10 @@ bible-study-web/
 │       │   ├── route.ts                 # GET — sesión + versiculos(capitulo_numero) + secciones + analisis
 │       │   └── completar/route.ts
 │       ├── biblia/
-│       │   ├── libros/route.ts          # GET — filtra por version_biblica del usuario
-│       │   ├── route.ts                 # GET — caps o versiculos + secciones, filtra por version
-│       │   └── buscar/route.ts          # GET — full-text ilike, filtra por version, limit 30
+│       │   ├── libros/route.ts          # GET — acepta ?version= override; fallback a version_biblica del usuario
+│       │   ├── route.ts                 # GET — caps o versiculos + secciones; acepta ?version= override
+│       │   ├── buscar/route.ts          # GET — RPC accent-insensitive con fallback a ilike; acepta ?version=
+│       │   └── comparar/route.ts        # GET — mismo pasaje en múltiples versiones en paralelo
 │       ├── analisis/route.ts
 │       ├── plan/
 │       │   ├── route.ts
@@ -182,6 +183,13 @@ bible_configuracion → clave (PK), valor, descripcion, updated_at
   -- Registros: version_disponible_1..4 (RV1909/RVR1960/NVI/TLA), idioma, modelo_llama
 ```
 
+**RPC (Supabase SQL — ver `database/008_busqueda_sin_tildes.sql`):**
+```sql
+buscar_versiculos_v2(termino TEXT, p_version TEXT)
+  → busca versículos con unaccent(lower(...)) LIKE — requiere extensión unaccent
+  → fallback automático a ilike en el route handler si el RPC no existe
+```
+
 **Versiones bíblicas disponibles:**
 
 | Versión  | Versículos | Secciones |
@@ -192,10 +200,12 @@ bible_configuracion → clave (PK), valor, descripcion, updated_at
 | TLA      | ~26 000    | Sí        |
 
 **Notas importantes:**
-- `bible_usuarios.version_biblica` controla qué versión ve el usuario en el lector — default `'RVR1960'`
+- `bible_usuarios.version_biblica` controla la versión permanente del usuario (usada en `/estudio`, `/analisis`, `/configuracion`)
+- Las pills de versión en `/biblia` son **estado local** — no modifican `version_biblica` del perfil, solo cambian la versión del lector en esa sesión
+- `/api/biblia/libros`, `/api/biblia` y `/api/biblia/buscar` aceptan `?version=` override: si se pasa y es válido, lo usan en lugar de la versión guardada del usuario
 - `bible_libros.version` filtra todo el contenido bíblico — los constraints UNIQUE incluyen `version`
 - `bible_secciones` se obtiene via JOIN con `bible_libros.version` — no hay columna `version` directa en la tabla
-- Las sesiones (planes de estudio) están pinadas a IDs de versículos de cuando se creó el plan — cambiar `version_biblica` no afecta `/estudio` ni `/analisis`, solo al lector libre `/biblia`
+- Las sesiones están pinadas a IDs de versículos de cuando se creó el plan — cambiar `version_biblica` no afecta `/estudio` ni `/analisis`
 - `bible_tareas.origen` tiene CHECK constraint: solo `'llama'` o `'usuario'`
 - CASCADE DELETE en `bible_usuarios` elimina planes, sesiones, análisis y tareas
 
@@ -208,8 +218,12 @@ bible_configuracion → clave (PK), valor, descripcion, updated_at
 - **Verso range en sesiones:** mismo capítulo → rango por `numero`; distinto capítulo → rango por `id`
 - **`capitulo_numero` en versículos:** `/api/estudio` y `/api/sesion/[id]/versiculos` hacen join con `bible_capitulos` para devolver el número de capítulo en cada verso — necesario para encabezados de capítulo sin queries extra
 - **`secciones` en los endpoints de versículos:** se consulta `bible_secciones` filtrando por `id_libro` + rango de capítulos (`gte`/`lte`) en paralelo con la query de versículos. El frontend hace `find()` por `capitulo + versiculo_inicio` para insertar el título antes del verso correcto
-- **Filtrado por versión en `/api/biblia`:** todos los endpoints verifican `bible_usuarios.version_biblica` del usuario autenticado antes de servir libros, capítulos, versículos o resultados de búsqueda
-- **Búsqueda full-text `/api/biblia/buscar`:** Supabase no permite `.eq()` sobre relaciones anidadas, por eso busca con `limit 60` y filtra en memoria por `libro.version` para devolver 30 resultados de la versión correcta
+- **`?version=` override en `/api/biblia/*`:** si el param está presente y es válido (`RV1909|RVR1960|NVI|TLA`), se usa directamente sin leer `bible_usuarios`; si no, cae al perfil del usuario. Permite cambio local de versión sin afectar configuración
+- **`/api/biblia/buscar`:** intenta RPC `buscar_versiculos_v2` (accent-insensitive via `unaccent`); si falla, cae a `ilike` básico con filtro en memoria por versión
+- **`/api/biblia/comparar`:** recibe `libro` (nombre), `capitulo` y `versiones` (CSV); busca el libro por `ilike` en cada versión, luego trae versículos y secciones en paralelo con `Promise.all`
+- **`parsearReferencia` en `/biblia`:** normaliza acentos con NFD+strip en ambos lados (input y nombres de libro) — `genesis`, `génesis` y `Génesis` resuelven al mismo libro; la longitud se preserva para slicear correctamente el texto original
+- **Lector compartido en `/biblia`:** el estado del lector (`libroId`, `capituloNum`, `versiculos`, etc.) es compartido entre los tabs "Ir a referencia" y "Buscar libro" — cambiar de tab no limpia el contenido cargado
+- **Autocompletado de libros en `/biblia`:** filtrado 100% local (`useMemo` sobre `libros` ya cargados), accent-insensitive, sin llamadas a la API. Se muestra cuando el input no contiene aún un número de capítulo (`/\s+\d/` → ocultar)
 - **Stats en `/api/usuario`:** 3 queries secuenciales (plan IDs → sesion IDs → count analisis) — Supabase JS no soporta subqueries en `.in()`
 - **Versículos en `/analisis`** lazy al expandir card, cacheados en `versiculosMap` y `seccionesMap` por `sesion.id`
 - **Nav** oculta en `/login` vía `NavWrapper` con `usePathname`
@@ -229,15 +243,17 @@ Consistentes en `/estudio`, `/analisis` y `/biblia`:
 - **Divisor centrado** — `— Análisis —` separa texto bíblico de análisis en `/estudio` y `/analisis`
 
 Específico de `/biblia`:
-- **Barra de referencia inteligente** — parsea `Juan 3:16`, `Gén 1`, `Sal 23:1` etc. contra nombres y abreviaturas
+- **Tres tabs:** "Ir a referencia" · "Buscar libro" · "Comparar"
+- **"Ir a referencia"** — input con autocomplete de libro (dropdown local mientras escribes el nombre); soporta `Juan 3:16`, `Gén 1`, `genesis 1:10` (accent-insensitive); explorar por libro colapsable
+- **"Buscar libro"** — autocomplete de nombres de libro (accent-insensitive, highlight); al seleccionar carga capítulo 1 y muestra el lector en el mismo tab sin cambiar de modo
+- **"Comparar"** — mismo input con autocomplete de libro; selección de versiones (pills toggle, mín. 2); resultados en grid 2 columnas (desktop) / 1 columna (móvil)
+- **Lector compartido** entre "Ir a referencia" y "Buscar libro" — versículos, A−/A+, prev/next capítulo, clic para copiar, highlight de versículo con scroll
+- **Pills de versión** — estado local, sin afectar perfil; al cambiar recarga libros y si había un pasaje activo lo recarga en la nueva versión
 - **Highlight de versículo** — scroll automático + fondo azul 2.5s al navegar a versículo específico
-- **Búsqueda full-text** — tab "Buscar texto", resultados con término resaltado, clic navega al versículo
-- **Explorar por libro** — dropdowns colapsados como flujo alternativo
 - **Prev/next capítulo** — flechas al pie con nombre del capítulo adyacente
-- **Badge de versión** — muestra la versión activa (RVR1960, NVI…) junto al título
 
 Específico de `/configuracion`:
-- **Selector de versión bíblica** — 4 botones tipo radio (RV1909, RVR1960, NVI, TLA) con label + descripción; guarda inmediatamente via `PUT /api/usuario`
+- **Selector de versión bíblica** — 4 botones tipo radio (RV1909, RVR1960, NVI, TLA) con label + descripción; guarda inmediatamente via `PUT /api/usuario`; esta es la versión permanente del perfil
 
 ---
 
@@ -256,6 +272,9 @@ Específico de `/configuracion`:
 | A | Selector de versión bíblica | ✅ |
 | B | Filtrado por versión en `/biblia` | ✅ |
 | C | Títulos de sección (`bible_secciones`) | ✅ |
+| D | Pills de versión local + lector compartido en `/biblia` | ✅ |
+| E | Autocomplete de libros + parser accent-insensitive | ✅ |
+| F | Panel comparativo multi-versión | ✅ |
 
 ---
 
