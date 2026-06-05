@@ -4,7 +4,7 @@ import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import apiClient from "@/lib/axios";
 
-interface Usuario { id: string; email: string; nombre: string | null; created_at: string }
+interface Usuario { id: string; email: string; nombre: string | null; version_biblica: string; created_at: string }
 interface Stats { totalPlanes: number; sesionesCompletadas: number; totalAnalisis: number }
 interface UsuarioData { usuario: Usuario; stats: Stats }
 
@@ -50,6 +50,9 @@ export default function ConfiguracionPage() {
 
       {/* Perfil */}
       <PerfilForm usuario={usuario} onActualizado={(u) => setData((prev) => prev ? { ...prev, usuario: u } : prev)} />
+
+      {/* Versión bíblica */}
+      <VersionBiblicaForm usuario={usuario} onActualizado={(u) => setData((prev) => prev ? { ...prev, usuario: u } : prev)} />
 
       {/* Cambiar contraseña */}
       <CambiarPasswordForm />
@@ -118,6 +121,74 @@ function PerfilForm({ usuario, onActualizado }: { usuario: Usuario; onActualizad
           {guardando ? "Guardando..." : "Guardar cambios"}
         </button>
       </form>
+    </div>
+  );
+}
+
+/* ── Versión bíblica ────────────────────────────────────── */
+
+const VERSIONES = [
+  { valor: "RV1909", label: "Reina Valera 1909", descripcion: "Texto clásico" },
+  { valor: "RVR1960", label: "Reina Valera 1960", descripcion: "Revisión moderna del texto clásico" },
+  { valor: "NVI", label: "Nueva Versión Internacional", descripcion: "Lenguaje contemporáneo" },
+  { valor: "TLA", label: "Traducción en Lenguaje Actual", descripcion: "Lenguaje sencillo y directo" },
+];
+
+function VersionBiblicaForm({ usuario, onActualizado }: { usuario: Usuario; onActualizado: (u: Usuario) => void }) {
+  const [version, setVersion] = useState(usuario.version_biblica ?? "RVR1960");
+  const [guardando, setGuardando] = useState(false);
+  const [mensaje, setMensaje] = useState<{ tipo: "ok" | "error"; texto: string } | null>(null);
+
+  async function handleCambiar(nuevaVersion: string) {
+    setVersion(nuevaVersion);
+    setMensaje(null);
+    setGuardando(true);
+    try {
+      const res = await apiClient.put<{ usuario: Usuario }>("/api/usuario", { version_biblica: nuevaVersion });
+      onActualizado(res.data.usuario);
+      setMensaje({ tipo: "ok", texto: "Versión actualizada" });
+    } catch {
+      setMensaje({ tipo: "error", texto: "No se pudo actualizar la versión" });
+    } finally {
+      setGuardando(false);
+    }
+  }
+
+  return (
+    <div className="border border-[#E8E4DF] rounded-xl p-5 md:p-6">
+      <p className="font-inter text-xs text-[#8A8A8A] uppercase tracking-wide mb-5">Versión bíblica</p>
+      <div className="space-y-2">
+        {VERSIONES.map((v) => {
+          const activa = version === v.valor;
+          return (
+            <button
+              key={v.valor}
+              onClick={() => !activa && !guardando && handleCambiar(v.valor)}
+              disabled={guardando}
+              className={`w-full text-left flex items-center justify-between px-4 py-3.5 rounded-lg border transition-colors ${
+                activa
+                  ? "border-[#4A6FA5] bg-[#4A6FA5]/5"
+                  : "border-[#E8E4DF] hover:bg-[#FAF8F5]"
+              } disabled:opacity-50`}
+            >
+              <div>
+                <p className={`font-inter text-sm ${activa ? "text-[#4A6FA5] font-medium" : "text-[#2C2C2C]"}`}>
+                  {v.label}
+                </p>
+                <p className="font-inter text-xs text-[#8A8A8A] mt-0.5">{v.descripcion}</p>
+              </div>
+              {activa && (
+                <span className="font-inter text-xs text-[#4A6FA5] shrink-0 ml-3">✓ Activa</span>
+              )}
+            </button>
+          );
+        })}
+      </div>
+      {mensaje && (
+        <p className={`font-inter text-sm mt-4 ${mensaje.tipo === "ok" ? "text-[#4A6FA5]" : "text-red-500"}`}>
+          {mensaje.texto}
+        </p>
+      )}
     </div>
   );
 }

@@ -9,7 +9,7 @@ export async function GET() {
 
   const { data, error } = await supabase
     .from("bible_usuarios")
-    .select("id, email, nombre, created_at")
+    .select("id, email, nombre, version_biblica, created_at")
     .eq("id", user.id)
     .single();
 
@@ -60,16 +60,34 @@ export async function PUT(request: NextRequest) {
   const { data: { user } } = await authClient.auth.getUser();
   if (!user) return NextResponse.json({ error: "No autenticado" }, { status: 401 });
 
-  const { nombre } = await request.json();
-  if (!nombre?.trim()) {
-    return NextResponse.json({ error: "El nombre no puede estar vacío" }, { status: 400 });
+  const { nombre, version_biblica } = await request.json();
+
+  const VERSIONES_VALIDAS = ["RV1909", "RVR1960", "NVI", "TLA"];
+  const updates: Record<string, string> = {};
+
+  if (nombre !== undefined) {
+    if (!nombre?.trim()) {
+      return NextResponse.json({ error: "El nombre no puede estar vacío" }, { status: 400 });
+    }
+    updates.nombre = nombre.trim();
+  }
+
+  if (version_biblica !== undefined) {
+    if (!VERSIONES_VALIDAS.includes(version_biblica)) {
+      return NextResponse.json({ error: "Versión bíblica no válida" }, { status: 400 });
+    }
+    updates.version_biblica = version_biblica;
+  }
+
+  if (Object.keys(updates).length === 0) {
+    return NextResponse.json({ error: "Nada que actualizar" }, { status: 400 });
   }
 
   const { data, error } = await supabase
     .from("bible_usuarios")
-    .update({ nombre: nombre.trim() })
+    .update(updates)
     .eq("id", user.id)
-    .select("id, email, nombre")
+    .select("id, email, nombre, version_biblica")
     .single();
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
