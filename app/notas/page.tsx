@@ -71,10 +71,99 @@ function exportarNotas(notas: NotaDetalle[]) {
   URL.revokeObjectURL(url);
 }
 
+function exportarPDF(notas: NotaDetalle[]) {
+  const fecha = new Date().toLocaleDateString("es-ES", {
+    day: "numeric", month: "long", year: "numeric",
+  });
+
+  const coloresBg: Record<string, string> = {
+    amarillo: "#FEF9C3", verde: "#DCFCE7", azul: "#DBEAFE", rosado: "#FCE7F3",
+  };
+  const coloresBorder: Record<string, string> = {
+    amarillo: "#FDE047", verde: "#86EFAC", azul: "#93C5FD", rosado: "#F9A8D4",
+  };
+  const coloresFg: Record<string, string> = {
+    amarillo: "#854D0E", verde: "#166534", azul: "#1E40AF", rosado: "#9D174D",
+  };
+
+  const grupos = (test: string) => {
+    const filtradas = notas.filter((n) => n.libro.testamento === test);
+    const map = new Map<string, { libro: NotaDetalle["libro"]; notas: NotaDetalle[] }>();
+    for (const n of filtradas) {
+      if (!map.has(n.abreviatura_libro)) map.set(n.abreviatura_libro, { libro: n.libro, notas: [] });
+      map.get(n.abreviatura_libro)!.notas.push(n);
+    }
+    return Array.from(map.values()).sort((a, b) => a.libro.orden - b.libro.orden);
+  };
+
+  const renderGrupos = (test: string, titulo: string) => {
+    const gs = grupos(test);
+    if (!gs.length) return "";
+    return `
+      <h2 class="testamento">${titulo}</h2>
+      ${gs.map((g) => `
+        <div class="libro">
+          <h3>${g.libro.nombre}</h3>
+          ${g.notas.map((n) => {
+            const rango = n.versiculo_fin > n.versiculo_inicio
+              ? `${n.capitulo}:${n.versiculo_inicio}–${n.versiculo_fin}`
+              : `${n.capitulo}:${n.versiculo_inicio}`;
+            const bg = coloresBg[n.color] ?? "#FEF9C3";
+            const border = coloresBorder[n.color] ?? "#FDE047";
+            const fg = coloresFg[n.color] ?? "#854D0E";
+            return `
+              <div class="nota" style="background:${bg};border-left-color:${border}">
+                <p class="ref" style="color:${fg}">${n.abreviatura_libro} ${rango}</p>
+                <p class="texto">${n.texto.replace(/\n/g, "<br>")}</p>
+              </div>`;
+          }).join("")}
+        </div>`).join("")}`;
+  };
+
+  const html = `<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <title>Mis Notas Bíblicas</title>
+  <style>
+    @import url('https://fonts.googleapis.com/css2?family=Lora:ital,wght@0,400;0,600;1,400&family=Inter:wght@400;500&display=swap');
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: 'Inter', sans-serif; color: #2C2C2C; padding: 40px; max-width: 720px; margin: 0 auto; }
+    header { border-bottom: 1px solid #E8E4DF; padding-bottom: 16px; margin-bottom: 32px; }
+    header h1 { font-family: 'Lora', serif; font-size: 24px; margin-bottom: 4px; }
+    header p { font-size: 12px; color: #8A8A8A; }
+    .testamento { font-size: 10px; text-transform: uppercase; letter-spacing: 0.12em; color: #8A8A8A; margin: 28px 0 16px; }
+    .libro { margin-bottom: 24px; }
+    .libro h3 { font-family: 'Lora', serif; font-size: 16px; margin-bottom: 10px; }
+    .nota { border-left: 4px solid; border-radius: 8px; padding: 10px 14px; margin-bottom: 8px; page-break-inside: avoid; }
+    .ref { font-size: 11px; font-weight: 500; margin-bottom: 4px; }
+    .texto { font-family: 'Lora', serif; font-size: 13px; line-height: 1.7; }
+    @media print { body { padding: 20px; } }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>Mis Notas Bíblicas</h1>
+    <p>Exportado el ${fecha} · ${notas.length} nota${notas.length !== 1 ? "s" : ""}</p>
+  </header>
+  ${renderGrupos("Antiguo", "Antiguo Testamento")}
+  ${renderGrupos("Nuevo", "Nuevo Testamento")}
+</body>
+</html>`;
+
+  const win = window.open("", "_blank");
+  if (!win) return;
+  win.document.write(html);
+  win.document.close();
+  win.focus();
+  setTimeout(() => win.print(), 400);
+}
+
 export default function NotasPage() {
   const [notas, setNotas] = useState<NotaDetalle[]>([]);
   const [loading, setLoading] = useState(true);
   const [filtroColor, setFiltroColor] = useState<string | null>(null);
+  const [menuExportar, setMenuExportar] = useState(false);
 
   useEffect(() => {
     apiClient
@@ -121,15 +210,43 @@ export default function NotasPage() {
             )}
           </div>
 
-          {/* Botón exportar */}
+          {/* Dropdown exportar */}
           {!loading && notas.length > 0 && (
-            <button
-              onClick={() => exportarNotas(notasFiltradas.length ? notasFiltradas : notas)}
-              className="shrink-0 font-inter text-xs text-[#8A8A8A] hover:text-[#4A6FA5] border border-[#E8E4DF] hover:border-[#4A6FA5]/50 px-3 py-1.5 rounded-lg transition-colors mt-1"
-              title="Exportar notas como texto"
-            >
-              Exportar .txt
-            </button>
+            <div className="relative mt-1">
+              <button
+                onClick={() => setMenuExportar((v) => !v)}
+                className="shrink-0 font-inter text-xs text-[#8A8A8A] hover:text-[#4A6FA5] border border-[#E8E4DF] hover:border-[#4A6FA5]/50 px-3 py-1.5 rounded-lg transition-colors flex items-center gap-1"
+              >
+                Exportar
+                <span className="text-[10px] opacity-60">▾</span>
+              </button>
+              {menuExportar && (
+                <>
+                  {/* Backdrop para cerrar */}
+                  <div className="fixed inset-0 z-10" onClick={() => setMenuExportar(false)} />
+                  <div className="absolute right-0 top-full mt-1 z-20 bg-white border border-[#E8E4DF] rounded-xl shadow-lg py-1 min-w-[130px]">
+                    <button
+                      onClick={() => {
+                        exportarNotas(notasFiltradas.length ? notasFiltradas : notas);
+                        setMenuExportar(false);
+                      }}
+                      className="w-full text-left font-inter text-xs text-[#2C2C2C] hover:bg-[#F0EDE8] px-4 py-2.5 transition-colors"
+                    >
+                      Como .txt
+                    </button>
+                    <button
+                      onClick={() => {
+                        exportarPDF(notasFiltradas.length ? notasFiltradas : notas);
+                        setMenuExportar(false);
+                      }}
+                      className="w-full text-left font-inter text-xs text-[#2C2C2C] hover:bg-[#F0EDE8] px-4 py-2.5 transition-colors"
+                    >
+                      Como PDF
+                    </button>
+                  </div>
+                </>
+              )}
+            </div>
           )}
         </div>
 
