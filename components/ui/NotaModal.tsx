@@ -114,10 +114,12 @@ function BottomSheetNota(props: NotaModalProps) {
   const currentY = useRef(0);
 
   function onTouchStart(e: React.TouchEvent) {
+    if (e.touches.length > 1) return; // ignorar pellizco (pinch-to-zoom)
     startY.current = e.touches[0].clientY;
   }
 
   function onTouchMove(e: React.TouchEvent) {
+    if (e.touches.length > 1) { startY.current = null; return; } // cancelar si el usuario pellizca
     if (startY.current === null) return;
     const delta = e.touches[0].clientY - startY.current;
     if (delta < 0) return;
@@ -306,7 +308,7 @@ function ContenidoNota({
           }}
           placeholder="Escribe tu nota… (Ctrl+Enter para guardar)"
           rows={5}
-          className="font-inter text-sm text-[#2C2C2C] w-full resize-none border border-[#E8E4DF] rounded-xl px-4 py-3 focus:outline-none focus:border-[#4A6FA5] bg-white placeholder:text-[#C0BAB3] leading-6"
+          className="font-inter text-base md:text-sm text-[#2C2C2C] w-full resize-none border border-[#E8E4DF] rounded-xl px-4 py-3 focus:outline-none focus:border-[#4A6FA5] bg-white placeholder:text-[#C0BAB3] leading-6"
         />
         <p className="font-inter text-xs text-right tabular-nums"
           style={{ color: texto.length > 500 ? "#F87171" : "#C0BAB3" }}>
