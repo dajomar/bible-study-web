@@ -29,6 +29,16 @@ interface Grupo {
 
 const COLORES_ORDEN = ["amarillo", "verde", "azul", "rosado"] as const;
 
+function formatFechaNota(dateStr: string): string {
+  try {
+    return new Date(dateStr).toLocaleDateString("es-ES", {
+      day: "numeric", month: "short", year: "numeric",
+    });
+  } catch {
+    return "";
+  }
+}
+
 function exportarNotas(notas: NotaDetalle[]) {
   const fecha = new Date().toLocaleDateString("es-ES", {
     day: "numeric", month: "long", year: "numeric",
@@ -56,7 +66,8 @@ function exportarNotas(notas: NotaDetalle[]) {
         const rango = n.versiculo_fin > n.versiculo_inicio
           ? `${n.capitulo}:${n.versiculo_inicio}–${n.versiculo_fin}`
           : `${n.capitulo}:${n.versiculo_inicio}`;
-        lineas.push(`  ${n.abreviatura_libro} ${rango}`);
+        const fechaNota = formatFechaNota(n.updated_at);
+        lineas.push(`  ${n.abreviatura_libro} ${rango}${fechaNota ? `  [${fechaNota}]` : ""}`);
         if (n.versiculos_texto?.length) {
           lineas.push(`  «${n.versiculos_texto.join(" ")}»`);
         }
@@ -75,97 +86,170 @@ function exportarNotas(notas: NotaDetalle[]) {
   URL.revokeObjectURL(url);
 }
 
-function exportarPDF(notas: NotaDetalle[]) {
-  const fecha = new Date().toLocaleDateString("es-ES", {
-    day: "numeric", month: "long", year: "numeric",
-  });
+async function exportarPDF(notas: NotaDetalle[]) {
+  const { jsPDF } = await import("jspdf");
 
-  const coloresBg: Record<string, string> = {
-    amarillo: "#FEF9C3", verde: "#DCFCE7", azul: "#DBEAFE", rosado: "#FCE7F3",
-  };
-  const coloresBorder: Record<string, string> = {
-    amarillo: "#FDE047", verde: "#86EFAC", azul: "#93C5FD", rosado: "#F9A8D4",
-  };
-  const coloresFg: Record<string, string> = {
-    amarillo: "#854D0E", verde: "#166534", azul: "#1E40AF", rosado: "#9D174D",
-  };
+  const doc = new jsPDF({ unit: "mm", format: "a4" });
+  const ML = 18, MR = 18, MT = 18, MB = 20;
+  const PW = 210, PH = 297;
+  const CW = PW - ML - MR;
+  const LINE_H = 5.2;
+  const INNER_X = ML + 6;
+  const INNER_W = CW - 9;
 
-  const grupos = (test: string) => {
-    const filtradas = notas.filter((n) => n.libro.testamento === test);
-    const map = new Map<string, { libro: NotaDetalle["libro"]; notas: NotaDetalle[] }>();
-    for (const n of filtradas) {
-      if (!map.has(n.abreviatura_libro)) map.set(n.abreviatura_libro, { libro: n.libro, notas: [] });
-      map.get(n.abreviatura_libro)!.notas.push(n);
+  let y = MT;
+
+  function checkBreak(need: number) {
+    if (y + need > PH - MB) { doc.addPage(); y = MT; }
+  }
+
+  function hexRgb(hex: string): [number, number, number] {
+    return [parseInt(hex.slice(1, 3), 16), parseInt(hex.slice(3, 5), 16), parseInt(hex.slice(5, 7), 16)];
+  }
+
+  const NOTA_BG:     Record<string, string> = { amarillo: "#FEF9C3", verde: "#DCFCE7", azul: "#DBEAFE", rosado: "#FCE7F3" };
+  const NOTA_BAR:    Record<string, string> = { amarillo: "#FDE047", verde: "#86EFAC", azul: "#93C5FD", rosado: "#F9A8D4" };
+  const NOTA_FG:     Record<string, string> = { amarillo: "#854D0E", verde: "#166534", azul: "#1E40AF", rosado: "#9D174D" };
+
+  const fecha = new Date().toLocaleDateString("es-ES", { day: "numeric", month: "long", year: "numeric" });
+
+  // ── Título ──
+  doc.setFont("times", "bold");
+  doc.setFontSize(20);
+  doc.setTextColor(44, 44, 44);
+  doc.text("Mis Notas B\u00EDblicas", ML, y);
+  y += 7;
+
+  doc.setFont("helvetica", "normal");
+  doc.setFontSize(8.5);
+  doc.setTextColor(138, 138, 138);
+  doc.text(`Exportado el ${fecha} \u00B7 ${notas.length} nota${notas.length !== 1 ? "s" : ""}`, ML, y);
+  y += 4;
+
+  doc.setDrawColor(232, 228, 223);
+  doc.setLineWidth(0.3);
+  doc.line(ML, y, PW - MR, y);
+  y += 8;
+
+  // ── Testamentos ──
+  for (const [testLabel, testKey] of [
+    ["ANTIGUO TESTAMENTO", "Antiguo"],
+    ["NUEVO TESTAMENTO",   "Nuevo"],
+  ] as const) {
+    const testNotas = notas.filter((n) => n.libro.testamento === testKey);
+    if (!testNotas.length) continue;
+
+    checkBreak(14);
+    doc.setFont("helvetica", "normal");
+    doc.setFontSize(7.5);
+    doc.setTextColor(138, 138, 138);
+    doc.text(testLabel, ML, y);
+    y += 7;
+
+    // Agrupar por libro
+    const libroMap = new Map<string, { libro: NotaDetalle["libro"]; notas: NotaDetalle[] }>();
+    for (const n of testNotas) {
+      if (!libroMap.has(n.abreviatura_libro))
+        libroMap.set(n.abreviatura_libro, { libro: n.libro, notas: [] });
+      libroMap.get(n.abreviatura_libro)!.notas.push(n);
     }
-    return Array.from(map.values()).sort((a, b) => a.libro.orden - b.libro.orden);
-  };
+    const libroGroups = Array.from(libroMap.values()).sort((a, b) => a.libro.orden - b.libro.orden);
 
-  const renderGrupos = (test: string, titulo: string) => {
-    const gs = grupos(test);
-    if (!gs.length) return "";
-    return `
-      <h2 class="testamento">${titulo}</h2>
-      ${gs.map((g) => `
-        <div class="libro">
-          <h3>${g.libro.nombre}</h3>
-          ${g.notas.map((n) => {
-            const rango = n.versiculo_fin > n.versiculo_inicio
-              ? `${n.capitulo}:${n.versiculo_inicio}–${n.versiculo_fin}`
-              : `${n.capitulo}:${n.versiculo_inicio}`;
-            const bg = coloresBg[n.color] ?? "#FEF9C3";
-            const border = coloresBorder[n.color] ?? "#FDE047";
-            const fg = coloresFg[n.color] ?? "#854D0E";
-            const textoVerso = n.versiculos_texto?.length
-              ? `<p class="versiculo">${n.versiculos_texto.join(" ")}</p>`
-              : "";
-            return `
-              <div class="nota" style="background:${bg};border-left-color:${border}">
-                <p class="ref" style="color:${fg}">${n.abreviatura_libro} ${rango}</p>
-                ${textoVerso}
-                <p class="nota-texto">${n.texto.replace(/\n/g, "<br>")}</p>
-              </div>`;
-          }).join("")}
-        </div>`).join("")}`;
-  };
+    for (const { libro, notas: lNotas } of libroGroups) {
+      checkBreak(14);
+      doc.setFont("times", "bold");
+      doc.setFontSize(12);
+      doc.setTextColor(44, 44, 44);
+      doc.text(libro.nombre, ML, y);
+      y += 7;
 
-  const html = `<!DOCTYPE html>
-<html lang="es">
-<head>
-  <meta charset="UTF-8">
-  <title>Mis Notas Bíblicas</title>
-  <style>
-    @import url('https://fonts.googleapis.com/css2?family=Lora:ital,wght@0,400;0,600;1,400&family=Inter:wght@400;500&display=swap');
-    * { box-sizing: border-box; margin: 0; padding: 0; }
-    body { font-family: 'Inter', sans-serif; color: #2C2C2C; padding: 40px; max-width: 720px; margin: 0 auto; }
-    header { border-bottom: 1px solid #E8E4DF; padding-bottom: 16px; margin-bottom: 32px; }
-    header h1 { font-family: 'Lora', serif; font-size: 24px; margin-bottom: 4px; }
-    header p { font-size: 12px; color: #8A8A8A; }
-    .testamento { font-size: 10px; text-transform: uppercase; letter-spacing: 0.12em; color: #8A8A8A; margin: 28px 0 16px; }
-    .libro { margin-bottom: 24px; }
-    .libro h3 { font-family: 'Lora', serif; font-size: 16px; margin-bottom: 10px; }
-    .nota { border-left: 4px solid; border-radius: 8px; padding: 10px 14px; margin-bottom: 8px; page-break-inside: avoid; }
-    .ref { font-size: 11px; font-weight: 500; margin-bottom: 6px; }
-    .versiculo { font-family: 'Lora', serif; font-size: 13px; line-height: 1.7; color: #2C2C2C; margin-bottom: 8px; font-style: italic; }
-    .nota-texto { font-family: 'Inter', sans-serif; font-size: 12px; line-height: 1.65; color: #3C3C3C; border-top: 1px solid rgba(0,0,0,0.08); padding-top: 7px; margin-top: 2px; }
-    @media print { body { padding: 20px; } }
-  </style>
-</head>
-<body>
-  <header>
-    <h1>Mis Notas Bíblicas</h1>
-    <p>Exportado el ${fecha} · ${notas.length} nota${notas.length !== 1 ? "s" : ""}</p>
-  </header>
-  ${renderGrupos("Antiguo", "Antiguo Testamento")}
-  ${renderGrupos("Nuevo", "Nuevo Testamento")}
-</body>
-</html>`;
+      for (const nota of lNotas) {
+        const rango = nota.versiculo_fin > nota.versiculo_inicio
+          ? `${nota.capitulo}:${nota.versiculo_inicio}\u2013${nota.versiculo_fin}`
+          : `${nota.capitulo}:${nota.versiculo_inicio}`;
 
-  const win = window.open("", "_blank");
-  if (!win) return;
-  win.document.write(html);
-  win.document.close();
-  win.focus();
-  setTimeout(() => win.print(), 400);
+        // Calcular altura antes de dibujar
+        doc.setFont("times", "italic");
+        doc.setFontSize(10);
+        const versoLines: string[] = nota.versiculos_texto?.length
+          ? doc.splitTextToSize(nota.versiculos_texto.join(" "), INNER_W)
+          : [];
+
+        doc.setFont("helvetica", "normal");
+        doc.setFontSize(10);
+        const notaLines: string[] = doc.splitTextToSize(nota.texto, INNER_W);
+
+        const hasSep = versoLines.length > 0;
+        const boxH = 5                               // ref row
+          + (versoLines.length > 0 ? versoLines.length * LINE_H + 3 : 0)
+          + (hasSep ? 2 : 0)
+          + notaLines.length * LINE_H
+          + 7;                                        // padding top+bottom
+
+        checkBreak(boxH + 3);
+
+        const bgRgb  = hexRgb(NOTA_BG[nota.color]  ?? "#FEF9C3");
+        const barRgb = hexRgb(NOTA_BAR[nota.color] ?? "#FDE047");
+        const fgRgb  = hexRgb(NOTA_FG[nota.color]  ?? "#854D0E");
+
+        // Fondo
+        doc.setFillColor(bgRgb[0], bgRgb[1], bgRgb[2]);
+        doc.roundedRect(ML, y, CW, boxH, 2, 2, "F");
+
+        // Barra izquierda (encima del fondo)
+        doc.setFillColor(barRgb[0], barRgb[1], barRgb[2]);
+        doc.rect(ML, y, 3, boxH, "F");
+
+        let iy = y + 5;
+
+        // Referencia
+        doc.setFont("helvetica", "bold");
+        doc.setFontSize(9);
+        doc.setTextColor(fgRgb[0], fgRgb[1], fgRgb[2]);
+        doc.text(`${nota.abreviatura_libro} ${rango}`, INNER_X, iy);
+
+        // Fecha (derecha)
+        const fechaNota = formatFechaNota(nota.updated_at);
+        if (fechaNota) {
+          doc.setFont("helvetica", "normal");
+          doc.setFontSize(8);
+          doc.setTextColor(160, 160, 160);
+          const fw = doc.getTextWidth(fechaNota);
+          doc.text(fechaNota, ML + CW - fw - 3, iy);
+        }
+        iy += 5.5;
+
+        // Texto bíblico
+        if (versoLines.length > 0) {
+          doc.setFont("times", "italic");
+          doc.setFontSize(10);
+          doc.setTextColor(44, 44, 44);
+          doc.text(versoLines, INNER_X, iy);
+          iy += versoLines.length * LINE_H + 1;
+
+          // Separador
+          doc.setDrawColor(180, 180, 180);
+          doc.setLineWidth(0.2);
+          doc.line(INNER_X, iy + 0.5, ML + CW - 3, iy + 0.5);
+          iy += 3;
+        }
+
+        // Texto de nota
+        doc.setFont("helvetica", "normal");
+        doc.setFontSize(10);
+        doc.setTextColor(60, 60, 60);
+        doc.text(notaLines, INNER_X, iy);
+
+        y += boxH + 3;
+      }
+
+      y += 3;
+    }
+
+    y += 3;
+  }
+
+  doc.save(`notas-biblicas-${new Date().toISOString().slice(0, 10)}.pdf`);
 }
 
 export default function NotasPage() {
@@ -244,9 +328,9 @@ export default function NotasPage() {
                       Como .txt
                     </button>
                     <button
-                      onClick={() => {
-                        exportarPDF(notasFiltradas.length ? notasFiltradas : notas);
+                      onClick={async () => {
                         setMenuExportar(false);
+                        await exportarPDF(notasFiltradas.length ? notasFiltradas : notas);
                       }}
                       className="w-full text-left font-inter text-xs text-[#2C2C2C] hover:bg-[#F0EDE8] px-4 py-2.5 transition-colors"
                     >
