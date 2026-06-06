@@ -5,11 +5,44 @@ import type { Comentario } from "@/hooks/useComentarios";
 
 function BookOpenIcon() {
   return (
-    <svg width="14" height="14" viewBox="0 0 24 24" fill="none"
+    <svg width="18" height="18" viewBox="0 0 24 24" fill="none"
       stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
       <path d="M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2z" />
       <path d="M22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7z" />
     </svg>
+  );
+}
+
+/* ── Conversión de números romanos ──────────────────────────── */
+
+const ROMANOS: Record<string, number> = {
+  M: 1000, CM: 900, D: 500, CD: 400,
+  C: 100, XC: 90, L: 50, XL: 40,
+  X: 10, IX: 9, V: 5, IV: 4, I: 1,
+};
+
+function romanToInt(roman: string): number {
+  let result = 0;
+  let i = 0;
+  const r = roman.toUpperCase();
+  while (i < r.length) {
+    const two = r.slice(i, i + 2);
+    const one = r.slice(i, i + 1);
+    if (ROMANOS[two]) { result += ROMANOS[two]; i += 2; }
+    else if (ROMANOS[one]) { result += ROMANOS[one]; i += 1; }
+    else break;
+  }
+  return result;
+}
+
+function convertirRomanosArabigos(texto: string): string {
+  // Lookahead requiere dígito tras la coma/punto — evita falsos positivos en fin de frase
+  return texto.replace(
+    /\b(M{0,4}(?:CM|CD|D?C{0,3})(?:XC|XL|L?X{0,3})(?:IX|IV|V?I{0,3}))\b(?=\s*[,.]\s*\d)/gi,
+    (match) => {
+      const num = romanToInt(match);
+      return num > 0 && num <= 200 ? String(num) : match;
+    }
   );
 }
 
@@ -223,7 +256,7 @@ function ContenidoComentario({
       {/* Cuerpo con scroll */}
       <div className="overflow-y-auto px-6 py-5 flex-1">
         <p className="font-lora text-sm text-[#2C2C2C] leading-7 whitespace-pre-line">
-          {comentario.texto}
+          {convertirRomanosArabigos(comentario.texto)}
         </p>
       </div>
 
