@@ -95,12 +95,12 @@ export function ComentarioOverlay({
   if (isMobile) {
     return <BottomSheet comentario={comentario} referencia={referencia} onCerrar={onCerrar} />;
   }
-  return <Modal comentario={comentario} referencia={referencia} onCerrar={onCerrar} />;
+  return <SidePanel comentario={comentario} referencia={referencia} onCerrar={onCerrar} />;
 }
 
-/* ── Modal desktop ──────────────────────────────────────────── */
+/* ── Panel lateral desktop ──────────────────────────────────── */
 
-function Modal({
+function SidePanel({
   comentario,
   referencia,
   onCerrar,
@@ -110,15 +110,21 @@ function Modal({
   onCerrar: () => void;
 }) {
   return (
-    <div
-      className="fixed inset-0 z-50 flex items-center justify-center px-4"
-      style={{ backgroundColor: "rgba(0,0,0,0.3)" }}
-      onClick={onCerrar}
-    >
+    <>
+      {/* Backdrop semitransparente — el texto bíblico sigue visible */}
       <div
-        className="relative bg-[#FAF8F5] rounded-2xl w-full max-w-lg shadow-xl flex flex-col max-h-[80vh]"
-        style={{ animation: "comentario-in 150ms ease-out" }}
-        onClick={(e) => e.stopPropagation()}
+        className="fixed inset-0 z-40"
+        style={{ backgroundColor: "rgba(0,0,0,0.12)" }}
+        onClick={onCerrar}
+      />
+      {/* Panel */}
+      <div
+        className="fixed right-0 top-0 h-full z-50 bg-[#FAF8F5] flex flex-col w-80 lg:w-96"
+        style={{
+          borderLeft: "1px solid #E8E4DF",
+          boxShadow: "-8px 0 32px rgba(0,0,0,0.10)",
+          animation: "panel-comentario-in 220ms ease-out",
+        }}
       >
         <ContenidoComentario
           comentario={comentario}
@@ -127,12 +133,12 @@ function Modal({
         />
       </div>
       <style>{`
-        @keyframes comentario-in {
-          from { opacity: 0; transform: scale(0.97); }
-          to   { opacity: 1; transform: scale(1); }
+        @keyframes panel-comentario-in {
+          from { transform: translateX(100%); }
+          to   { transform: translateX(0); }
         }
       `}</style>
-    </div>
+    </>
   );
 }
 
