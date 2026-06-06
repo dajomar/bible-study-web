@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import apiClient from "@/lib/axios";
@@ -93,7 +93,36 @@ export default function EstudioPage() {
   const [copiado, setCopiado] = useState<number | null>(null);
   const { resaltados, cargar, guardar, quitar } = useResaltados();
   const { cargar: cargarComentarios, comentarioPara } = useComentarios();
-  const { cargar: cargarNotas, notaPara, notaEnRango, guardar: guardarNota, eliminar: eliminarNota } = useNotas();
+  const { cargar: cargarNotas, notaPara, notaEnRango, notasDeCapitulo, guardar: guardarNota, eliminar: eliminarNota } = useNotas();
+  const versiculoRefs = useRef<Record<string, HTMLParagraphElement | null>>({});
+  const textColRef = useRef<HTMLDivElement>(null);
+  const [notaPositions, setNotaPositions] = useState<Map<number, number>>(new Map());
+
+  const notasActuales = useMemo(() => {
+    if (!data?.sesion) return [];
+    const abrev = data.sesion.capituloInicio.libro.abreviatura;
+    const caps = Array.from(new Set(data.versiculos.map((v) => v.capitulo_numero)));
+    return caps.flatMap((cap) => notasDeCapitulo(abrev, cap));
+  }, [data, notasDeCapitulo]);
+
+  useEffect(() => {
+    if (!notasActuales.length || !data?.versiculos.length) { setNotaPositions(new Map()); return; }
+    const raf = requestAnimationFrame(() => {
+      let minBottom = 0;
+      const pos = new Map<number, number>();
+      for (const n of [...notasActuales].sort((a, b) =>
+        a.capitulo !== b.capitulo ? a.capitulo - b.capitulo : a.versiculo_inicio - b.versiculo_inicio
+      )) {
+        const el = versiculoRefs.current[`${n.capitulo}_${n.versiculo_inicio}`];
+        if (!el) continue;
+        const top = Math.max(el.offsetTop, minBottom);
+        pos.set(n.id, top);
+        minBottom = top + 82 + 8;
+      }
+      setNotaPositions(pos);
+    });
+    return () => cancelAnimationFrame(raf);
+  }, [data, notasActuales]);
   const [comentarioAbierto, setComentarioAbierto] = useState<Comentario | null>(null);
   const [notaState, setNotaState] = useState<{
     versiculoId: number;
@@ -274,7 +303,10 @@ export default function EstudioPage() {
           </div>
         </div>
 
-        <div className="space-y-0.5">
+        {/* ── Layout dos columnas: texto + panel de notas ── */}
+        <div className={notasActuales.length > 0 ? "xl:flex xl:gap-6 xl:w-[calc(100%+240px)]" : ""}>
+          <div ref={textColRef} className="relative flex-1 min-w-0">
+          <div className="space-y-0.5">
           {versiculos.map((v, i) => {
             const esNuevoCapitulo = i === 0 || v.id_capitulo !== versiculos[i - 1].id_capitulo;
             const seccion = secciones.find(
@@ -306,6 +338,7 @@ export default function EstudioPage() {
                 )}
                 <p
                   data-versiculo-id={v.id}
+                  ref={(el) => { versiculoRefs.current[`${v.capitulo_numero}_${v.numero}`] = el; }}
                   onMouseUp={() => {
                     const sel = window.getSelection();
                     if (!sel || sel.isCollapsed || !sel.rangeCount) return;
@@ -354,6 +387,42 @@ export default function EstudioPage() {
             );
           })}
         </div>
+          </div>{/* fin columna texto */}
+
+          {/* ── Panel lateral de notas ── */}
+          {notasActuales.length > 0 && (
+            <div className="hidden xl:block w-56 shrink-0 relative">
+              {notasActuales.map((nota) => {
+                const top = notaPositions.get(nota.id);
+                if (top === undefined) return null;
+                const colores = COLORES_NOTA[nota.color] ?? COLORES_NOTA.amarillo;
+                const rango = nota.versiculo_fin > nota.versiculo_inicio
+                  ? `${nota.capitulo}:${nota.versiculo_inicio}–${nota.versiculo_fin}`
+                  : `${nota.capitulo}:${nota.versiculo_inicio}`;
+                return (
+                  <div
+                    key={nota.id}
+                    className="absolute w-full cursor-pointer rounded-lg px-3 py-2.5 shadow-sm hover:shadow-md transition-shadow"
+                    style={{ top, backgroundColor: colores.bg, borderLeft: `3px solid ${colores.swatch}` }}
+                    onClick={() => {
+                      const maxFin = Math.max(...versiculos.filter((x) => x.capitulo_numero === nota.capitulo).map((x) => x.numero), nota.versiculo_inicio);
+                      const v = versiculos.find((x) => x.capitulo_numero === nota.capitulo && x.numero === nota.versiculo_inicio);
+                      setNotaState({ versiculoId: v?.id ?? 0, versiculoNum: nota.versiculo_inicio, capituloNum: nota.capitulo, versiculoFinMax: maxFin, notaExistente: nota });
+                    }}
+                  >
+                    <p className="font-inter text-[10px] font-semibold mb-1" style={{ color: colores.fg }}>
+                      {nota.abreviatura_libro} {rango}
+                    </p>
+                    <p className="font-inter text-[11px] text-[#2C2C2C] leading-[1.45] line-clamp-4">
+                      {nota.texto}
+                    </p>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+
+        </div>{/* fin layout dos columnas */}
       </section>
 
       {/* Divisor */}

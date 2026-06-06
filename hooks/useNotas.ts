@@ -100,5 +100,12 @@ export function useNotas() {
     }
   }, []);
 
-  return { cargar, notaPara, notaEnRango, guardar, eliminar };
+  /** Todas las notas cargadas para un capítulo. */
+  const notasDeCapitulo = useCallback(
+    (abreviatura: string, capitulo: number): Nota[] =>
+      cache[`${abreviatura}_${capitulo}`] ?? [],
+    [cache]
+  );
+
+  return { cargar, notaPara, notaEnRango, notasDeCapitulo, guardar, eliminar };
 }

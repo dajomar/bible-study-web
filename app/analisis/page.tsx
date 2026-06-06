@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState, Suspense } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, Suspense } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import apiClient from "@/lib/axios";
 import { useResaltados } from "@/hooks/useResaltados";
@@ -98,7 +98,66 @@ function AnalisisContent() {
   const [copiado, setCopiad] = useState<number | null>(null);
   const { resaltados, cargar, guardar, quitar } = useResaltados();
   const { cargar: cargarComentarios, comentarioPara } = useComentarios();
-  const { cargar: cargarNotas, notaPara, notaEnRango, guardar: guardarNota, eliminar: eliminarNota } = useNotas();
+  const { cargar: cargarNotas, notaPara, notaEnRango, notasDeCapitulo, guardar: guardarNota, eliminar: eliminarNota } = useNotas();
+  const versiculoRefsA = useRef<Record<string, HTMLParagraphElement | null>>({});
+  const [notaPositionsA, setNotaPositionsA] = useState<Map<number, number>>(new Map());
+  const [panelLeftA, setPanelLeftA] = useState(0);
+
+  const notasActualesA = useMemo(() => {
+    if (!abierto) return [];
+    const analisisAbierto = lista.find((a) => a.id === abierto);
+    if (!analisisAbierto) return [];
+    const abrev = analisisAbierto.sesion.inicio.capitulo.libro.abreviatura;
+    const capIni = analisisAbierto.sesion.inicio.capitulo.numero;
+    const capFin = analisisAbierto.sesion.fin.capitulo.numero;
+    const all: Nota[] = [];
+    for (let c = capIni; c <= capFin; c++) all.push(...notasDeCapitulo(abrev, c));
+    return all;
+  }, [abierto, lista, notasDeCapitulo]);
+
+  // Limpiar refs y posiciones al cambiar de card
+  useEffect(() => { versiculoRefsA.current = {}; setNotaPositionsA(new Map()); }, [abierto]);
+
+  // Calcular posiciones usando getBoundingClientRect (bypass overflow:hidden de la card)
+  const calcNotaPositionsA = useCallback(() => {
+    if (!notasActualesA.length) { setNotaPositionsA(new Map()); return; }
+
+    // Calcular left del panel desde el borde derecho del texto
+    const anyEl = Object.values(versiculoRefsA.current).find((el) => el !== null);
+    if (anyEl) setPanelLeftA(anyEl.getBoundingClientRect().right + 20);
+
+    let minBottom = 0;
+    const pos = new Map<number, number>();
+    for (const n of [...notasActualesA].sort((a, b) =>
+      a.capitulo !== b.capitulo ? a.capitulo - b.capitulo : a.versiculo_inicio - b.versiculo_inicio
+    )) {
+      const el = versiculoRefsA.current[`${n.capitulo}_${n.versiculo_inicio}`];
+      if (!el) continue;
+      const top = Math.max(el.getBoundingClientRect().top, minBottom);
+      pos.set(n.id, top);
+      minBottom = top + 82 + 8;
+    }
+    setNotaPositionsA(pos);
+  }, [notasActualesA]);
+
+  // Recalcular cuando cargan los versículos o cambia la card abierta
+  useEffect(() => {
+    const analisisAbierto = lista.find((a) => a.id === abierto);
+    const versActuales = analisisAbierto ? (versiculosMap[analisisAbierto.sesion.id] ?? []) : [];
+    if (!notasActualesA.length || !versActuales.length) { setNotaPositionsA(new Map()); return; }
+    const raf = requestAnimationFrame(calcNotaPositionsA);
+    return () => cancelAnimationFrame(raf);
+  }, [versiculosMap, abierto, notasActualesA, lista, calcNotaPositionsA]);
+
+  // Recalcular en scroll y resize
+  useEffect(() => {
+    window.addEventListener("scroll", calcNotaPositionsA, { passive: true });
+    window.addEventListener("resize", calcNotaPositionsA);
+    return () => {
+      window.removeEventListener("scroll", calcNotaPositionsA);
+      window.removeEventListener("resize", calcNotaPositionsA);
+    };
+  }, [calcNotaPositionsA]);
   const [comentarioAbierto, setComentarioAbierto] = useState<Comentario | null>(null);
   const [notaState, setNotaState] = useState<{
     sesionId: number;
@@ -371,6 +430,7 @@ function AnalisisContent() {
                                 )}
                                 <p
                                   data-versiculo-id={v.id}
+                                  ref={(el) => { versiculoRefsA.current[`${v.capitulo_numero}_${v.numero}`] = el; }}
                                   onMouseUp={() => {
                                     const sel = window.getSelection();
                                     if (!sel || sel.isCollapsed || !sel.rangeCount) return;
@@ -512,6 +572,41 @@ function AnalisisContent() {
           referencia={`${comentarioAbierto.titulo_capitulo ?? ""} ${comentarioAbierto.versiculo_inicio}${comentarioAbierto.versiculo_inicio !== comentarioAbierto.versiculo_fin ? `–${comentarioAbierto.versiculo_fin}` : ""}`}
           onCerrar={() => setComentarioAbierto(null)}
         />
+      )}
+
+      {/* ── Panel lateral de notas (fixed — escapa el overflow:hidden de la card) ── */}
+      {notasActualesA.length > 0 && abierto && (
+        <div className="hidden xl:block fixed inset-y-0 w-56 pointer-events-none" style={{ zIndex: 30, left: panelLeftA || undefined }}>
+          {notasActualesA.map((nota) => {
+            const top = notaPositionsA.get(nota.id);
+            if (top === undefined || top < 56) return null;
+            const colores = COLORES_NOTA[nota.color] ?? COLORES_NOTA.amarillo;
+            const rango = nota.versiculo_fin > nota.versiculo_inicio
+              ? `${nota.capitulo}:${nota.versiculo_inicio}–${nota.versiculo_fin}`
+              : `${nota.capitulo}:${nota.versiculo_inicio}`;
+            const analisisAbierto = lista.find((a) => a.id === abierto);
+            return (
+              <div
+                key={nota.id}
+                className="absolute w-full pointer-events-auto cursor-pointer rounded-lg px-3 py-2.5 shadow-sm hover:shadow-md transition-shadow"
+                style={{ top, backgroundColor: colores.bg, borderLeft: `3px solid ${colores.swatch}` }}
+                onClick={() => {
+                  if (!analisisAbierto) return;
+                  const sesionVers = versiculosMap[analisisAbierto.sesion.id] ?? [];
+                  const maxFin = Math.max(...sesionVers.filter((x) => x.capitulo_numero === nota.capitulo).map((x) => x.numero), nota.versiculo_inicio);
+                  setNotaState({ sesionId: analisisAbierto.sesion.id, abreviatura: nota.abreviatura_libro, libroNombre: analisisAbierto.sesion.inicio.capitulo.libro.nombre, versiculoNum: nota.versiculo_inicio, capituloNum: nota.capitulo, versiculoFinMax: maxFin, notaExistente: nota });
+                }}
+              >
+                <p className="font-inter text-[10px] font-semibold mb-1" style={{ color: colores.fg }}>
+                  {nota.abreviatura_libro} {rango}
+                </p>
+                <p className="font-inter text-[11px] text-[#2C2C2C] leading-[1.45] line-clamp-4">
+                  {nota.texto}
+                </p>
+              </div>
+            );
+          })}
+        </div>
       )}
     </main>
   );

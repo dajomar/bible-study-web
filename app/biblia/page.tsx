@@ -164,7 +164,7 @@ function BibliaContent() {
   const [modo, setModo] = useState<Modo>("referencia");
   const { resaltados, cargar, guardar, quitar } = useResaltados();
   const { cargar: cargarComentarios, comentarioPara } = useComentarios();
-  const { cargar: cargarNotas, notaPara, notaEnRango, guardar: guardarNota, eliminar: eliminarNota } = useNotas();
+  const { cargar: cargarNotas, notaPara, notaEnRango, notasDeCapitulo, guardar: guardarNota, eliminar: eliminarNota } = useNotas();
   const [comentarioAbierto, setComentarioAbierto] = useState<Comentario | null>(null);
   const [notaState, setNotaState] = useState<{
     versiculoNum: number;
@@ -192,6 +192,8 @@ function BibliaContent() {
   // ── Estado: versículo destacado ──
   const [versiculoDestacado, setVersiculoDestacado] = useState<number | null>(null);
   const versiculoRefs = useRef<Record<number, HTMLParagraphElement | null>>({});
+  const textColRef = useRef<HTMLDivElement>(null);
+  const [notaPositions, setNotaPositions] = useState<Map<number, number>>(new Map());
 
   // ── Estado: comparar ──
   const [refComparar, setRefComparar] = useState("");
@@ -515,6 +517,34 @@ function BibliaContent() {
   const hayAnterior = capActual > 1;
   const haySiguiente = capActual > 0 && capActual < capitulos.length;
 
+  // ── Notas del capítulo actual (para el panel lateral) ──
+  // eslint-disable-next-line react-hooks/rules-of-hooks
+  const notasActuales = useMemo(() => {
+    if (!libroSeleccionado || !capituloNum) return [];
+    return notasDeCapitulo(libroSeleccionado.abreviatura, Number(capituloNum));
+  }, [libroSeleccionado, capituloNum, notasDeCapitulo]);
+
+  // eslint-disable-next-line react-hooks/rules-of-hooks
+  useEffect(() => {
+    if (!notasActuales.length || !versiculos.length) {
+      setNotaPositions(new Map());
+      return;
+    }
+    const id = requestAnimationFrame(() => {
+      let minBottom = 0;
+      const pos = new Map<number, number>();
+      for (const n of [...notasActuales].sort((a, b) => a.versiculo_inicio - b.versiculo_inicio)) {
+        const el = versiculoRefs.current[n.versiculo_inicio];
+        if (!el) continue;
+        const top = Math.max(el.offsetTop, minBottom);
+        pos.set(n.id, top);
+        minBottom = top + 82 + 8;
+      }
+      setNotaPositions(pos);
+    });
+    return () => cancelAnimationFrame(id);
+  }, [versiculos, notasActuales]);
+
   return (
     <main className="max-w-3xl mx-auto px-4 md:px-6 py-8 md:py-12">
 
@@ -772,95 +802,137 @@ function BibliaContent() {
             </div>
           )}
 
-          {/* Versículos */}
-          {!loadingVers && versiculos.length > 0 && (
-            <div className="space-y-0.5">
-              <div className="flex items-center gap-3 mb-4">
-                <div className="flex-1 h-px bg-[#E8E4DF]" />
-                <p className="font-lora text-sm text-[#4A6FA5] tracking-wide">Capítulo {capituloNum}</p>
-                <div className="flex-1 h-px bg-[#E8E4DF]" />
-              </div>
-              {versiculos.map((v, i) => {
-                const destacado = versiculoDestacado === v.numero;
-                const seccion = secciones.find((s) => s.versiculo_inicio === v.numero);
-                const numerosAnteriores = versiculos.slice(0, i).map((a) => a.numero);
-                const comentario = libroSeleccionado
-                  ? comentarioPara(libroSeleccionado.abreviatura, Number(capituloNum), v.numero, numerosAnteriores)
-                  : null;
-                return (
-                  <div key={v.id}>
-                    {seccion && (
-                      <p className="font-inter text-xs font-medium text-[#4A6FA5] uppercase tracking-widest mt-6 mb-2 px-2 -mx-2">
-                        {seccion.titulo}
-                      </p>
-                    )}
-                    <p
-                      data-versiculo-id={v.id}
-                      ref={(el) => { versiculoRefs.current[v.numero] = el; }}
-                      onMouseUp={() => {
-                        const sel = window.getSelection();
-                        if (!sel || sel.isCollapsed || !sel.rangeCount) return;
-                        const rect = sel.getRangeAt(0).getBoundingClientRect();
-                        if (!rect.width && !rect.height) return;
-                        setMenuState(makeMenuState(v, rect));
-                      }}
-                      onClick={(e) => {
-                        const sel = window.getSelection();
-                        if (sel && !sel.isCollapsed) return;
-                        setMenuState(makeMenuState(v, (e.currentTarget as HTMLElement).getBoundingClientRect()));
-                      }}
-                      title="Clic para copiar · selecciona texto para resaltar"
-                      style={{
-                        backgroundColor: copiado === v.id || destacado
-                          ? undefined
-                          : (() => {
-                              const abrev = libroSeleccionado?.abreviatura ?? "";
-                              const n = notaEnRango(abrev, Number(capituloNum), v.numero);
-                              if (n) return COLORES_NOTA[n.color]?.bg;
-                              return resaltados[v.id] ? COLORES_RESALTADO[resaltados[v.id]].bg : undefined;
-                            })(),
-                      }}
-                      className={`font-lora ${FONT_SIZES[tamano].clase} rounded-md px-2 -mx-2 cursor-pointer transition-colors duration-500 ${
-                        copiado === v.id ? "bg-[#4A6FA5]/10 text-[#4A6FA5]"
-                          : destacado ? "bg-[#4A6FA5]/15 text-[#2C2C2C]"
-                          : "text-[#2C2C2C] hover:bg-[#F0EDE8]"
-                      }`}
-                    >
-                      <span className="text-[#8A8A8A] text-xs align-super mr-1.5 font-inter">{v.numero}</span>
-                      {v.texto}
-                      {comentario && (
-                        <ComentarioIcono comentario={comentario} onAbrir={setComentarioAbierto} />
-                      )}
-                      {libroSeleccionado && (() => {
-                        const nota = notaPara(libroSeleccionado.abreviatura, Number(capituloNum), v.numero);
-                        return nota ? <NotaIcono nota={nota} onAbrir={(n) => {
-                          const maxFin = Math.max(...versiculos.map((x) => x.numero), v.numero);
-                          setNotaState({ versiculoNum: v.numero, versiculoFinMax: maxFin, notaExistente: n });
-                        }} /> : null;
-                      })()}
-                      {copiado === v.id && (
-                        <span className="ml-2 font-inter text-xs text-[#4A6FA5] not-italic">copiado</span>
-                      )}
-                    </p>
-                  </div>
-                );
-              })}
-            </div>
-          )}
+          {/* ── Layout dos columnas: texto + panel de notas ── */}
+          <div className={notasActuales.length > 0 ? "xl:flex xl:gap-6 xl:w-[calc(100%+240px)]" : ""}>
 
-          {/* Navegación prev/next */}
-          {capituloNum && !loadingVers && (
-            <div className="flex items-center justify-between mt-10 pt-6 border-t border-[#E8E4DF]">
-              <button onClick={() => navCapitulo(-1)} disabled={!hayAnterior}
-                className="font-inter text-sm text-[#4A6FA5] hover:text-[#3d5f8f] disabled:opacity-30 disabled:cursor-not-allowed transition-colors">
-                ← {hayAnterior ? `${libroSeleccionado?.nombre} ${capActual - 1}` : ""}
-              </button>
-              <button onClick={() => navCapitulo(1)} disabled={!haySiguiente}
-                className="font-inter text-sm text-[#4A6FA5] hover:text-[#3d5f8f] disabled:opacity-30 disabled:cursor-not-allowed transition-colors">
-                {haySiguiente ? `${libroSeleccionado?.nombre} ${capActual + 1}` : ""} →
-              </button>
-            </div>
-          )}
+            {/* Columna de texto */}
+            <div ref={textColRef} className="relative flex-1 min-w-0">
+
+              {/* Versículos */}
+              {!loadingVers && versiculos.length > 0 && (
+                <div className="space-y-0.5">
+                  <div className="flex items-center gap-3 mb-4">
+                    <div className="flex-1 h-px bg-[#E8E4DF]" />
+                    <p className="font-lora text-sm text-[#4A6FA5] tracking-wide">Capítulo {capituloNum}</p>
+                    <div className="flex-1 h-px bg-[#E8E4DF]" />
+                  </div>
+                  {versiculos.map((v, i) => {
+                    const destacado = versiculoDestacado === v.numero;
+                    const seccion = secciones.find((s) => s.versiculo_inicio === v.numero);
+                    const numerosAnteriores = versiculos.slice(0, i).map((a) => a.numero);
+                    const comentario = libroSeleccionado
+                      ? comentarioPara(libroSeleccionado.abreviatura, Number(capituloNum), v.numero, numerosAnteriores)
+                      : null;
+                    return (
+                      <div key={v.id}>
+                        {seccion && (
+                          <p className="font-inter text-xs font-medium text-[#4A6FA5] uppercase tracking-widest mt-6 mb-2 px-2 -mx-2">
+                            {seccion.titulo}
+                          </p>
+                        )}
+                        <p
+                          data-versiculo-id={v.id}
+                          ref={(el) => { versiculoRefs.current[v.numero] = el; }}
+                          onMouseUp={() => {
+                            const sel = window.getSelection();
+                            if (!sel || sel.isCollapsed || !sel.rangeCount) return;
+                            const rect = sel.getRangeAt(0).getBoundingClientRect();
+                            if (!rect.width && !rect.height) return;
+                            setMenuState(makeMenuState(v, rect));
+                          }}
+                          onClick={(e) => {
+                            const sel = window.getSelection();
+                            if (sel && !sel.isCollapsed) return;
+                            setMenuState(makeMenuState(v, (e.currentTarget as HTMLElement).getBoundingClientRect()));
+                          }}
+                          title="Clic para copiar · selecciona texto para resaltar"
+                          style={{
+                            backgroundColor: copiado === v.id || destacado
+                              ? undefined
+                              : (() => {
+                                  const abrev = libroSeleccionado?.abreviatura ?? "";
+                                  const n = notaEnRango(abrev, Number(capituloNum), v.numero);
+                                  if (n) return COLORES_NOTA[n.color]?.bg;
+                                  return resaltados[v.id] ? COLORES_RESALTADO[resaltados[v.id]].bg : undefined;
+                                })(),
+                          }}
+                          className={`font-lora ${FONT_SIZES[tamano].clase} rounded-md px-2 -mx-2 cursor-pointer transition-colors duration-500 ${
+                            copiado === v.id ? "bg-[#4A6FA5]/10 text-[#4A6FA5]"
+                              : destacado ? "bg-[#4A6FA5]/15 text-[#2C2C2C]"
+                              : "text-[#2C2C2C] hover:bg-[#F0EDE8]"
+                          }`}
+                        >
+                          <span className="text-[#8A8A8A] text-xs align-super mr-1.5 font-inter">{v.numero}</span>
+                          {v.texto}
+                          {comentario && (
+                            <ComentarioIcono comentario={comentario} onAbrir={setComentarioAbierto} />
+                          )}
+                          {libroSeleccionado && (() => {
+                            const nota = notaPara(libroSeleccionado.abreviatura, Number(capituloNum), v.numero);
+                            return nota ? <NotaIcono nota={nota} onAbrir={(n) => {
+                              const maxFin = Math.max(...versiculos.map((x) => x.numero), v.numero);
+                              setNotaState({ versiculoNum: v.numero, versiculoFinMax: maxFin, notaExistente: n });
+                            }} /> : null;
+                          })()}
+                          {copiado === v.id && (
+                            <span className="ml-2 font-inter text-xs text-[#4A6FA5] not-italic">copiado</span>
+                          )}
+                        </p>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+
+              {/* Navegación prev/next */}
+              {capituloNum && !loadingVers && (
+                <div className="flex items-center justify-between mt-10 pt-6 border-t border-[#E8E4DF]">
+                  <button onClick={() => navCapitulo(-1)} disabled={!hayAnterior}
+                    className="font-inter text-sm text-[#4A6FA5] hover:text-[#3d5f8f] disabled:opacity-30 disabled:cursor-not-allowed transition-colors">
+                    ← {hayAnterior ? `${libroSeleccionado?.nombre} ${capActual - 1}` : ""}
+                  </button>
+                  <button onClick={() => navCapitulo(1)} disabled={!haySiguiente}
+                    className="font-inter text-sm text-[#4A6FA5] hover:text-[#3d5f8f] disabled:opacity-30 disabled:cursor-not-allowed transition-colors">
+                    {haySiguiente ? `${libroSeleccionado?.nombre} ${capActual + 1}` : ""} →
+                  </button>
+                </div>
+              )}
+
+            </div>{/* fin columna texto */}
+
+            {/* ── Panel lateral de notas (solo xl+, solo cuando hay notas) ── */}
+            {notasActuales.length > 0 && (
+              <div className="hidden xl:block w-56 shrink-0 relative">
+                {notasActuales.map((nota) => {
+                  const top = notaPositions.get(nota.id);
+                  if (top === undefined) return null;
+                  const colores = COLORES_NOTA[nota.color] ?? COLORES_NOTA.amarillo;
+                  const rango = nota.versiculo_fin > nota.versiculo_inicio
+                    ? `${nota.capitulo}:${nota.versiculo_inicio}–${nota.versiculo_fin}`
+                    : `${nota.capitulo}:${nota.versiculo_inicio}`;
+                  return (
+                    <div
+                      key={nota.id}
+                      className="absolute w-full cursor-pointer rounded-lg px-3 py-2.5 shadow-sm hover:shadow-md transition-shadow"
+                      style={{ top, backgroundColor: colores.bg, borderLeft: `3px solid ${colores.swatch}` }}
+                      onClick={() => {
+                        const maxFin = Math.max(...versiculos.map((x) => x.numero), nota.versiculo_inicio);
+                        setNotaState({ versiculoNum: nota.versiculo_inicio, versiculoFinMax: maxFin, notaExistente: nota });
+                      }}
+                    >
+                      <p className="font-inter text-[10px] font-semibold mb-1" style={{ color: colores.fg }}>
+                        {nota.abreviatura_libro} {rango}
+                      </p>
+                      <p className="font-inter text-[11px] text-[#2C2C2C] leading-[1.45] line-clamp-4">
+                        {nota.texto}
+                      </p>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+
+          </div>{/* fin layout dos columnas */}
         </>
       )}
 
