@@ -11,6 +11,7 @@ const LINKS = [
   { href: "/biblia", label: "Biblia" },
   { href: "/analisis", label: "Análisis" },
   { href: "/resaltados", label: "Resaltados" },
+  { href: "/notas", label: "Notas" },
   { href: "/plan", label: "Plan" },
   { href: "/configuracion", label: "Config" },
 ];
