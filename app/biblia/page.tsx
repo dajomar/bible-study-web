@@ -4,7 +4,9 @@ import { Suspense, useEffect, useRef, useState, useCallback, useMemo } from "rea
 import { useRouter, useSearchParams } from "next/navigation";
 import apiClient from "@/lib/axios";
 import { useResaltados } from "@/hooks/useResaltados";
+import { useComentarios, type Comentario } from "@/hooks/useComentarios";
 import { FloatingVerseMenu, COLORES_RESALTADO } from "@/components/ui/FloatingVerseMenu";
+import { ComentarioIcono, ComentarioOverlay } from "@/components/ui/ComentarioOverlay";
 
 interface Libro {
   id: number;
@@ -159,6 +161,8 @@ function BibliaContent() {
   const [copiado, setCopiado] = useState<number | null>(null);
   const [modo, setModo] = useState<Modo>("referencia");
   const { resaltados, cargar, guardar, quitar } = useResaltados();
+  const { cargar: cargarComentarios, comentarioPara } = useComentarios();
+  const [comentarioAbierto, setComentarioAbierto] = useState<Comentario | null>(null);
   const [menuState, setMenuState] = useState<{
     versiculoId: number;
     rect: DOMRect;
@@ -274,10 +278,13 @@ function BibliaContent() {
       setVersiculos(res.data.versiculos);
       setSecciones(res.data.secciones ?? []);
       cargar(res.data.versiculos.map((v: Versiculo) => v.id));
+      // Cargar comentarios del capítulo
+      const libro = libros.find((l) => String(l.id) === libroIdVal);
+      if (libro) cargarComentarios(libro.abreviatura, Number(capNum));
     } finally {
       setLoadingVers(false);
     }
-  }, [versionLectura]);
+  }, [versionLectura, libros, cargarComentarios]);
 
   // ── Cambiar versión del lector (solo local) ──
   async function cambiarVersionLectura(nueva: string) {
@@ -746,9 +753,13 @@ function BibliaContent() {
                 <p className="font-lora text-sm text-[#4A6FA5] tracking-wide">Capítulo {capituloNum}</p>
                 <div className="flex-1 h-px bg-[#E8E4DF]" />
               </div>
-              {versiculos.map((v) => {
+              {versiculos.map((v, i) => {
                 const destacado = versiculoDestacado === v.numero;
                 const seccion = secciones.find((s) => s.versiculo_inicio === v.numero);
+                const numerosAnteriores = versiculos.slice(0, i).map((a) => a.numero);
+                const comentario = libroSeleccionado
+                  ? comentarioPara(libroSeleccionado.abreviatura, Number(capituloNum), v.numero, numerosAnteriores)
+                  : null;
                 return (
                   <div key={v.id}>
                     {seccion && (
@@ -787,6 +798,9 @@ function BibliaContent() {
                     >
                       <span className="text-[#8A8A8A] text-xs align-super mr-1.5 font-inter">{v.numero}</span>
                       {v.texto}
+                      {comentario && (
+                        <ComentarioIcono comentario={comentario} onAbrir={setComentarioAbierto} />
+                      )}
                       {copiado === v.id && (
                         <span className="ml-2 font-inter text-xs text-[#4A6FA5] not-italic">copiado</span>
                       )}
@@ -843,6 +857,14 @@ function BibliaContent() {
           onCopiar={() => { menuState.copiar(); setMenuState(null); window.getSelection()?.removeAllRanges(); }}
           onCompartir={() => { menuState.compartir(); setMenuState(null); window.getSelection()?.removeAllRanges(); }}
           onComparar={() => { menuState.comparar(); setMenuState(null); }}
+        />
+      )}
+
+      {comentarioAbierto && libroSeleccionado && (
+        <ComentarioOverlay
+          comentario={comentarioAbierto}
+          referencia={`${libroSeleccionado.nombre} ${capituloNum}:${comentarioAbierto.versiculo_inicio}${comentarioAbierto.versiculo_inicio !== comentarioAbierto.versiculo_fin ? `–${comentarioAbierto.versiculo_fin}` : ""}`}
+          onCerrar={() => setComentarioAbierto(null)}
         />
       )}
     </main>

@@ -24,14 +24,14 @@ export async function GET() {
           numero,
           capitulo:id_capitulo (
             numero,
-            libro:id_libro ( nombre )
+            libro:id_libro ( nombre, abreviatura )
           )
         ),
         fin:versiculo_fin_id (
           numero,
           capitulo:id_capitulo (
             numero,
-            libro:id_libro ( nombre )
+            libro:id_libro ( nombre, abreviatura )
           )
         )
       )

@@ -4,11 +4,13 @@ import { useEffect, useRef, useState, Suspense } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import apiClient from "@/lib/axios";
 import { useResaltados } from "@/hooks/useResaltados";
+import { useComentarios, type Comentario } from "@/hooks/useComentarios";
 import { FloatingVerseMenu, COLORES_RESALTADO } from "@/components/ui/FloatingVerseMenu";
+import { ComentarioIcono, ComentarioOverlay } from "@/components/ui/ComentarioOverlay";
 
 interface CapituloInfo {
   numero: number;
-  libro: { nombre: string };
+  libro: { nombre: string; abreviatura: string };
 }
 
 interface SesionInfo {
@@ -93,6 +95,8 @@ function AnalisisContent() {
   const [tamano, setTamano] = useState(1);
   const [copiado, setCopiad] = useState<number | null>(null);
   const { resaltados, cargar, guardar, quitar } = useResaltados();
+  const { cargar: cargarComentarios, comentarioPara } = useComentarios();
+  const [comentarioAbierto, setComentarioAbierto] = useState<Comentario | null>(null);
   const [menuState, setMenuState] = useState<{
     versiculoId: number;
     rect: DOMRect;
@@ -175,6 +179,11 @@ function AnalisisContent() {
         setVersiculosMap((prev) => ({ ...prev, [sesion.id]: res.data.versiculos }));
         setSeccionesMap((prev) => ({ ...prev, [sesion.id]: res.data.secciones ?? [] }));
         cargar(res.data.versiculos.map((v: Versiculo) => v.id));
+        // Cargar comentarios de los capítulos de esta sesión
+        const abrev = analisis.sesion.inicio.capitulo.libro.abreviatura;
+        const capIni = analisis.sesion.inicio.capitulo.numero;
+        const capFin = analisis.sesion.fin.capitulo.numero;
+        for (let c = capIni; c <= capFin; c++) cargarComentarios(abrev, c);
       } finally {
         setLoadingVers(null);
       }
@@ -313,6 +322,9 @@ function AnalisisContent() {
                             const seccion = secciones.find(
                               (s) => s.capitulo === v.capitulo_numero && s.versiculo_inicio === v.numero
                             );
+                            const abrev = a.sesion.inicio.capitulo.libro.abreviatura;
+                            const numerosAnteriores = versiculos.slice(0, i).filter(p => p.capitulo_numero === v.capitulo_numero).map(p => p.numero);
+                            const comentario = comentarioPara(abrev, v.capitulo_numero, v.numero, numerosAnteriores);
                             return (
                               <div key={v.id}>
                                 {esNuevoCapitulo && (
@@ -373,6 +385,9 @@ function AnalisisContent() {
                                 >
                                   <span className="text-[#8A8A8A] text-xs align-super mr-1 font-inter">{v.numero}</span>
                                   {v.texto}
+                                  {comentario && (
+                                    <ComentarioIcono comentario={comentario} onAbrir={setComentarioAbierto} />
+                                  )}
                                   {copiado === v.id && (
                                     <span className="ml-2 font-inter text-xs text-[#4A6FA5] not-italic">copiado</span>
                                   )}
@@ -411,6 +426,14 @@ function AnalisisContent() {
           onCopiar={() => { menuState.copiar(); setMenuState(null); window.getSelection()?.removeAllRanges(); }}
           onCompartir={() => { menuState.compartir(); setMenuState(null); window.getSelection()?.removeAllRanges(); }}
           onComparar={() => { menuState.comparar(); setMenuState(null); }}
+        />
+      )}
+
+      {comentarioAbierto && (
+        <ComentarioOverlay
+          comentario={comentarioAbierto}
+          referencia={`${comentarioAbierto.titulo_capitulo ?? ""} ${comentarioAbierto.versiculo_inicio}${comentarioAbierto.versiculo_inicio !== comentarioAbierto.versiculo_fin ? `–${comentarioAbierto.versiculo_fin}` : ""}`}
+          onCerrar={() => setComentarioAbierto(null)}
         />
       )}
     </main>
