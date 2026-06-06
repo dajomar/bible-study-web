@@ -16,16 +16,18 @@ interface Props {
   versiculoId: number;
   rect: DOMRect;
   resaltadoActual?: string;
+  tieneNota?: boolean;
   onColor: (versiculoId: number, color: string) => void;
   onQuitar: (versiculoId: number) => void;
   onCopiar: () => void;
   onCompartir: () => void;
   onComparar: () => void;
+  onNota?: () => void;
 }
 
 export function FloatingVerseMenu({
-  versiculoId, rect, resaltadoActual,
-  onColor, onQuitar, onCopiar, onCompartir, onComparar,
+  versiculoId, rect, resaltadoActual, tieneNota,
+  onColor, onQuitar, onCopiar, onCompartir, onComparar, onNota,
 }: Props) {
   const [vista, setVista] = useState<"acciones" | "resaltar">("acciones");
 
@@ -54,6 +56,21 @@ export function FloatingVerseMenu({
           >
             Resaltar
           </button>
+          {onNota && (
+            <>
+              <div className="w-px h-4 bg-[#E8E4DF] mx-0.5" />
+              <button
+                onClick={onNota}
+                className={`font-inter text-xs px-2 py-1 rounded-lg transition-colors ${
+                  tieneNota
+                    ? "text-[#4A6FA5] font-medium bg-[#4A6FA5]/8"
+                    : "text-[#2C2C2C] hover:bg-[#F0EDE8]"
+                }`}
+              >
+                Anotar
+              </button>
+            </>
+          )}
           <div className="w-px h-4 bg-[#E8E4DF] mx-0.5" />
           <button
             onClick={onCopiar}

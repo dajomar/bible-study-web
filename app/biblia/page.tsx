@@ -5,8 +5,10 @@ import { useRouter, useSearchParams } from "next/navigation";
 import apiClient from "@/lib/axios";
 import { useResaltados } from "@/hooks/useResaltados";
 import { useComentarios, type Comentario } from "@/hooks/useComentarios";
+import { useNotas, type Nota } from "@/hooks/useNotas";
 import { FloatingVerseMenu, COLORES_RESALTADO } from "@/components/ui/FloatingVerseMenu";
 import { ComentarioIcono, ComentarioOverlay } from "@/components/ui/ComentarioOverlay";
+import { NotaIcono, NotaModal } from "@/components/ui/NotaModal";
 
 interface Libro {
   id: number;
@@ -162,9 +164,17 @@ function BibliaContent() {
   const [modo, setModo] = useState<Modo>("referencia");
   const { resaltados, cargar, guardar, quitar } = useResaltados();
   const { cargar: cargarComentarios, comentarioPara } = useComentarios();
+  const { cargar: cargarNotas, notaPara, guardar: guardarNota, eliminar: eliminarNota } = useNotas();
   const [comentarioAbierto, setComentarioAbierto] = useState<Comentario | null>(null);
+  const [notaState, setNotaState] = useState<{
+    versiculoNum: number;
+    versiculoFinMax: number;
+    notaExistente: Nota | null;
+  } | null>(null);
   const [menuState, setMenuState] = useState<{
     versiculoId: number;
+    versiculoNum: number;
+    tieneNota: boolean;
     rect: DOMRect;
     copiar: () => void;
     compartir: () => void;
@@ -255,13 +265,27 @@ function BibliaContent() {
   function makeMenuState(v: Versiculo, rect: DOMRect) {
     const libro = libros.find((l) => String(l.id) === libroId);
     const verseRef = libro ? `${libro.nombre} ${capituloNum}:${v.numero}` : String(v.numero);
+    const abrev = libro?.abreviatura ?? "";
     return {
       versiculoId: v.id,
+      versiculoNum: v.numero,
+      tieneNota: !!notaPara(abrev, Number(capituloNum), v.numero),
       rect,
       copiar: () => copiarVersiculo(v),
       compartir: () => compartirVersiculo(v.texto, verseRef),
       comparar: () => router.push(`/comparar?libro=${encodeURIComponent(libro ? libro.nombre : "")}&capitulo=${capituloNum}&versiculo=${v.numero}`),
     };
+  }
+
+  function handleNota() {
+    if (!menuState || !libroSeleccionado) return;
+    const maxFin = Math.max(...versiculos.map((v) => v.numero), menuState.versiculoNum);
+    setNotaState({
+      versiculoNum: menuState.versiculoNum,
+      versiculoFinMax: maxFin,
+      notaExistente: notaPara(libroSeleccionado.abreviatura, Number(capituloNum), menuState.versiculoNum),
+    });
+    setMenuState(null);
   }
 
   // ── Cargar versículos ──
@@ -278,13 +302,16 @@ function BibliaContent() {
       setVersiculos(res.data.versiculos);
       setSecciones(res.data.secciones ?? []);
       cargar(res.data.versiculos.map((v: Versiculo) => v.id));
-      // Cargar comentarios del capítulo
+      // Cargar comentarios y notas del capítulo
       const libro = libros.find((l) => String(l.id) === libroIdVal);
-      if (libro) cargarComentarios(libro.abreviatura, Number(capNum));
+      if (libro) {
+        cargarComentarios(libro.abreviatura, Number(capNum));
+        cargarNotas(libro.abreviatura, Number(capNum));
+      }
     } finally {
       setLoadingVers(false);
     }
-  }, [versionLectura, libros, cargarComentarios]);
+  }, [versionLectura, libros, cargarComentarios, cargarNotas]);
 
   // ── Cambiar versión del lector (solo local) ──
   async function cambiarVersionLectura(nueva: string) {
@@ -801,6 +828,13 @@ function BibliaContent() {
                       {comentario && (
                         <ComentarioIcono comentario={comentario} onAbrir={setComentarioAbierto} />
                       )}
+                      {libroSeleccionado && (() => {
+                        const nota = notaPara(libroSeleccionado.abreviatura, Number(capituloNum), v.numero);
+                        return nota ? <NotaIcono nota={nota} onAbrir={(n) => {
+                          const maxFin = Math.max(...versiculos.map((x) => x.numero), v.numero);
+                          setNotaState({ versiculoNum: v.numero, versiculoFinMax: maxFin, notaExistente: n });
+                        }} /> : null;
+                      })()}
                       {copiado === v.id && (
                         <span className="ml-2 font-inter text-xs text-[#4A6FA5] not-italic">copiado</span>
                       )}
@@ -852,11 +886,37 @@ function BibliaContent() {
           versiculoId={menuState.versiculoId}
           rect={menuState.rect}
           resaltadoActual={resaltados[menuState.versiculoId]}
+          tieneNota={menuState.tieneNota}
           onColor={(id, color) => { guardar(id, color); setMenuState(null); window.getSelection()?.removeAllRanges(); }}
           onQuitar={(id) => { quitar(id); setMenuState(null); window.getSelection()?.removeAllRanges(); }}
           onCopiar={() => { menuState.copiar(); setMenuState(null); window.getSelection()?.removeAllRanges(); }}
           onCompartir={() => { menuState.compartir(); setMenuState(null); window.getSelection()?.removeAllRanges(); }}
           onComparar={() => { menuState.comparar(); setMenuState(null); }}
+          onNota={handleNota}
+        />
+      )}
+
+      {notaState && libroSeleccionado && (
+        <NotaModal
+          abreviatura_libro={libroSeleccionado.abreviatura}
+          capitulo={Number(capituloNum)}
+          versiculoInicio={notaState.versiculoNum}
+          versiculoFinMax={notaState.versiculoFinMax}
+          notaExistente={notaState.notaExistente}
+          libroNombre={libroSeleccionado.nombre}
+          onGuardar={async (datos) => {
+            await guardarNota({
+              abreviatura_libro: libroSeleccionado.abreviatura,
+              capitulo: Number(capituloNum),
+              versiculo_inicio: notaState.versiculoNum,
+              ...datos,
+            });
+          }}
+          onEliminar={notaState.notaExistente ? async () => {
+            await eliminarNota(notaState.notaExistente!);
+            setNotaState(null);
+          } : undefined}
+          onCerrar={() => setNotaState(null)}
         />
       )}
 

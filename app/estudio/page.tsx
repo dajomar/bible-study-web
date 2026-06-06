@@ -6,8 +6,10 @@ import { useRouter } from "next/navigation";
 import apiClient from "@/lib/axios";
 import { useResaltados } from "@/hooks/useResaltados";
 import { useComentarios, type Comentario } from "@/hooks/useComentarios";
+import { useNotas, type Nota } from "@/hooks/useNotas";
 import { FloatingVerseMenu, COLORES_RESALTADO } from "@/components/ui/FloatingVerseMenu";
 import { ComentarioIcono, ComentarioOverlay } from "@/components/ui/ComentarioOverlay";
+import { NotaIcono, NotaModal } from "@/components/ui/NotaModal";
 
 interface CapituloInfo {
   numero: number;
@@ -91,9 +93,20 @@ export default function EstudioPage() {
   const [copiado, setCopiado] = useState<number | null>(null);
   const { resaltados, cargar, guardar, quitar } = useResaltados();
   const { cargar: cargarComentarios, comentarioPara } = useComentarios();
+  const { cargar: cargarNotas, notaPara, guardar: guardarNota, eliminar: eliminarNota } = useNotas();
   const [comentarioAbierto, setComentarioAbierto] = useState<Comentario | null>(null);
+  const [notaState, setNotaState] = useState<{
+    versiculoId: number;
+    versiculoNum: number;
+    capituloNum: number;
+    versiculoFinMax: number;
+    notaExistente: Nota | null;
+  } | null>(null);
   const [menuState, setMenuState] = useState<{
     versiculoId: number;
+    versiculoNum: number;
+    capituloNum: number;
+    tieneNota: boolean;
     rect: DOMRect;
     copiar: () => void;
     compartir: () => void;
@@ -110,7 +123,10 @@ export default function EstudioPage() {
           const abrev = res.data.sesion.capituloInicio.libro.abreviatura;
           const capIni = res.data.sesion.capituloInicio.numero;
           const capFin = res.data.sesion.capituloFin.numero;
-          for (let c = capIni; c <= capFin; c++) cargarComentarios(abrev, c);
+          for (let c = capIni; c <= capFin; c++) {
+            cargarComentarios(abrev, c);
+            cargarNotas(abrev, c);
+          }
         }
       })
       .catch(() => setError("No se pudo cargar el estudio"))
@@ -174,16 +190,38 @@ export default function EstudioPage() {
   const { sesion, versiculos, secciones, analisis } = data;
   const referencia = buildReferencia(sesion);
 
+  const abrevEstudio = sesion.capituloInicio.libro.abreviatura;
+
   function makeMenuState(v: Versiculo, rect: DOMRect) {
     const libroNombre = sesion.capituloInicio.libro.nombre;
     const verseRef = `${libroNombre} ${v.capitulo_numero}:${v.numero}`;
     return {
       versiculoId: v.id,
+      versiculoNum: v.numero,
+      capituloNum: v.capitulo_numero,
+      tieneNota: !!notaPara(abrevEstudio, v.capitulo_numero, v.numero),
       rect,
       copiar: () => copiarVersiculo(v, verseRef),
       compartir: () => compartirVersiculo(v.texto, verseRef),
       comparar: () => router.push(`/comparar?libro=${encodeURIComponent(libroNombre)}&capitulo=${v.capitulo_numero}&versiculo=${v.numero}`),
     };
+  }
+
+  function handleNota() {
+    if (!menuState) return;
+    const v = versiculos.find((x) => x.id === menuState.versiculoId);
+    if (!v) return;
+    const maxFin = Math.max(
+      ...versiculos.filter((x) => x.capitulo_numero === v.capitulo_numero).map((x) => x.numero)
+    );
+    setNotaState({
+      versiculoId: v.id,
+      versiculoNum: v.numero,
+      capituloNum: v.capitulo_numero,
+      versiculoFinMax: maxFin,
+      notaExistente: notaPara(abrevEstudio, v.capitulo_numero, v.numero),
+    });
+    setMenuState(null);
   }
 
   return (
@@ -299,6 +337,13 @@ export default function EstudioPage() {
                   {comentario && (
                     <ComentarioIcono comentario={comentario} onAbrir={setComentarioAbierto} />
                   )}
+                  {(() => {
+                    const nota = notaPara(abrevEstudio, v.capitulo_numero, v.numero);
+                    return nota ? <NotaIcono nota={nota} onAbrir={(n) => {
+                      const maxFin = Math.max(...versiculos.filter((x) => x.capitulo_numero === v.capitulo_numero).map((x) => x.numero));
+                      setNotaState({ versiculoId: v.id, versiculoNum: v.numero, capituloNum: v.capitulo_numero, versiculoFinMax: maxFin, notaExistente: n });
+                    }} /> : null;
+                  })()}
                   {copiado === v.id && (
                     <span className="ml-2 font-inter text-xs text-[#4A6FA5] not-italic">copiado</span>
                   )}
@@ -343,11 +388,37 @@ export default function EstudioPage() {
           versiculoId={menuState.versiculoId}
           rect={menuState.rect}
           resaltadoActual={resaltados[menuState.versiculoId]}
+          tieneNota={menuState.tieneNota}
           onColor={(id, color) => { guardar(id, color); setMenuState(null); window.getSelection()?.removeAllRanges(); }}
           onQuitar={(id) => { quitar(id); setMenuState(null); window.getSelection()?.removeAllRanges(); }}
           onCopiar={() => { menuState.copiar(); setMenuState(null); window.getSelection()?.removeAllRanges(); }}
           onCompartir={() => { menuState.compartir(); setMenuState(null); window.getSelection()?.removeAllRanges(); }}
           onComparar={() => { menuState.comparar(); setMenuState(null); }}
+          onNota={handleNota}
+        />
+      )}
+
+      {notaState && (
+        <NotaModal
+          abreviatura_libro={abrevEstudio}
+          capitulo={notaState.capituloNum}
+          versiculoInicio={notaState.versiculoNum}
+          versiculoFinMax={notaState.versiculoFinMax}
+          notaExistente={notaState.notaExistente}
+          libroNombre={sesion.capituloInicio.libro.nombre}
+          onGuardar={async (datos) => {
+            await guardarNota({
+              abreviatura_libro: abrevEstudio,
+              capitulo: notaState.capituloNum,
+              versiculo_inicio: notaState.versiculoNum,
+              ...datos,
+            });
+          }}
+          onEliminar={notaState.notaExistente ? async () => {
+            await eliminarNota(notaState.notaExistente!);
+            setNotaState(null);
+          } : undefined}
+          onCerrar={() => setNotaState(null)}
         />
       )}
 

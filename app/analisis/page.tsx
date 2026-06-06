@@ -5,8 +5,10 @@ import { useRouter, useSearchParams } from "next/navigation";
 import apiClient from "@/lib/axios";
 import { useResaltados } from "@/hooks/useResaltados";
 import { useComentarios, type Comentario } from "@/hooks/useComentarios";
+import { useNotas, type Nota } from "@/hooks/useNotas";
 import { FloatingVerseMenu, COLORES_RESALTADO } from "@/components/ui/FloatingVerseMenu";
 import { ComentarioIcono, ComentarioOverlay } from "@/components/ui/ComentarioOverlay";
+import { NotaIcono, NotaModal } from "@/components/ui/NotaModal";
 
 interface CapituloInfo {
   numero: number;
@@ -96,9 +98,24 @@ function AnalisisContent() {
   const [copiado, setCopiad] = useState<number | null>(null);
   const { resaltados, cargar, guardar, quitar } = useResaltados();
   const { cargar: cargarComentarios, comentarioPara } = useComentarios();
+  const { cargar: cargarNotas, notaPara, guardar: guardarNota, eliminar: eliminarNota } = useNotas();
   const [comentarioAbierto, setComentarioAbierto] = useState<Comentario | null>(null);
+  const [notaState, setNotaState] = useState<{
+    abreviatura: string;
+    libroNombre: string;
+    versiculoNum: number;
+    capituloNum: number;
+    versiculoFinMax: number;
+    notaExistente: Nota | null;
+  } | null>(null);
   const [menuState, setMenuState] = useState<{
     versiculoId: number;
+    versiculoNum: number;
+    capituloNum: number;
+    abreviatura: string;
+    libroNombre: string;
+    tieneNota: boolean;
+    sesionId: number;
     rect: DOMRect;
     copiar: () => void;
     compartir: () => void;
@@ -150,6 +167,13 @@ function AnalisisContent() {
                 setVersiculosMap((prev) => ({ ...prev, [sesionId]: r.data.versiculos }));
                 setSeccionesMap((prev) => ({ ...prev, [sesionId]: r.data.secciones ?? [] }));
                 cargar(r.data.versiculos.map((v: Versiculo) => v.id));
+                const target = data.find((a) => a.sesion.id === sesionId);
+                if (target) {
+                  const abrev = target.sesion.inicio.capitulo.libro.abreviatura;
+                  const capIni = target.sesion.inicio.capitulo.numero;
+                  const capFin = target.sesion.fin.capitulo.numero;
+                  for (let c = capIni; c <= capFin; c++) cargarNotas(abrev, c);
+                }
               });
           }
         }
@@ -179,11 +203,14 @@ function AnalisisContent() {
         setVersiculosMap((prev) => ({ ...prev, [sesion.id]: res.data.versiculos }));
         setSeccionesMap((prev) => ({ ...prev, [sesion.id]: res.data.secciones ?? [] }));
         cargar(res.data.versiculos.map((v: Versiculo) => v.id));
-        // Cargar comentarios de los capítulos de esta sesión
+        // Cargar comentarios y notas de los capítulos de esta sesión
         const abrev = analisis.sesion.inicio.capitulo.libro.abreviatura;
         const capIni = analisis.sesion.inicio.capitulo.numero;
         const capFin = analisis.sesion.fin.capitulo.numero;
-        for (let c = capIni; c <= capFin; c++) cargarComentarios(abrev, c);
+        for (let c = capIni; c <= capFin; c++) {
+          cargarComentarios(abrev, c);
+          cargarNotas(abrev, c);
+        }
       } finally {
         setLoadingVers(null);
       }
@@ -349,8 +376,9 @@ function AnalisisContent() {
                                     const rect = sel.getRangeAt(0).getBoundingClientRect();
                                     if (!rect.width && !rect.height) return;
                                     const libroNombre = a.sesion.inicio.capitulo.libro.nombre;
+                                    const abrev = a.sesion.inicio.capitulo.libro.abreviatura;
                                     const verseRef = `${libroNombre} ${v.capitulo_numero}:${v.numero}`;
-                                    setMenuState({ versiculoId: v.id, rect,
+                                    setMenuState({ versiculoId: v.id, versiculoNum: v.numero, capituloNum: v.capitulo_numero, abreviatura: abrev, libroNombre, sesionId: a.sesion.id, tieneNota: !!notaPara(abrev, v.capitulo_numero, v.numero), rect,
                                       copiar: () => copiarVersiculo(v, referencia),
                                       compartir: () => compartirVersiculo(v.texto, verseRef),
                                       comparar: () => router.push(`/comparar?libro=${encodeURIComponent(libroNombre)}&capitulo=${v.capitulo_numero}&versiculo=${v.numero}`),
@@ -361,9 +389,10 @@ function AnalisisContent() {
                                     const sel = window.getSelection();
                                     if (sel && !sel.isCollapsed) return;
                                     const libroNombre = a.sesion.inicio.capitulo.libro.nombre;
+                                    const abrev = a.sesion.inicio.capitulo.libro.abreviatura;
                                     const verseRef = `${libroNombre} ${v.capitulo_numero}:${v.numero}`;
                                     const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
-                                    setMenuState({ versiculoId: v.id, rect,
+                                    setMenuState({ versiculoId: v.id, versiculoNum: v.numero, capituloNum: v.capitulo_numero, abreviatura: abrev, libroNombre, sesionId: a.sesion.id, tieneNota: !!notaPara(abrev, v.capitulo_numero, v.numero), rect,
                                       copiar: () => copiarVersiculo(v, referencia),
                                       compartir: () => compartirVersiculo(v.texto, verseRef),
                                       comparar: () => router.push(`/comparar?libro=${encodeURIComponent(libroNombre)}&capitulo=${v.capitulo_numero}&versiculo=${v.numero}`),
@@ -388,6 +417,15 @@ function AnalisisContent() {
                                   {comentario && (
                                     <ComentarioIcono comentario={comentario} onAbrir={setComentarioAbierto} />
                                   )}
+                                  {(() => {
+                                    const abrev = a.sesion.inicio.capitulo.libro.abreviatura;
+                                    const nota = notaPara(abrev, v.capitulo_numero, v.numero);
+                                    return nota ? <NotaIcono nota={nota} onAbrir={(n) => {
+                                      const sesionVers = versiculosMap[a.sesion.id] ?? [];
+                                      const maxFin = Math.max(...sesionVers.filter((x) => x.capitulo_numero === v.capitulo_numero).map((x) => x.numero), v.numero);
+                                      setNotaState({ abreviatura: abrev, libroNombre: a.sesion.inicio.capitulo.libro.nombre, versiculoNum: v.numero, capituloNum: v.capitulo_numero, versiculoFinMax: maxFin, notaExistente: n });
+                                    }} /> : null;
+                                  })()}
                                   {copiado === v.id && (
                                     <span className="ml-2 font-inter text-xs text-[#4A6FA5] not-italic">copiado</span>
                                   )}
@@ -421,11 +459,43 @@ function AnalisisContent() {
           versiculoId={menuState.versiculoId}
           rect={menuState.rect}
           resaltadoActual={resaltados[menuState.versiculoId]}
+          tieneNota={menuState.tieneNota}
           onColor={(id, color) => { guardar(id, color); setMenuState(null); window.getSelection()?.removeAllRanges(); }}
           onQuitar={(id) => { quitar(id); setMenuState(null); window.getSelection()?.removeAllRanges(); }}
           onCopiar={() => { menuState.copiar(); setMenuState(null); window.getSelection()?.removeAllRanges(); }}
           onCompartir={() => { menuState.compartir(); setMenuState(null); window.getSelection()?.removeAllRanges(); }}
           onComparar={() => { menuState.comparar(); setMenuState(null); }}
+          onNota={() => {
+            const { versiculoNum, capituloNum, abreviatura, libroNombre, sesionId } = menuState;
+            const sesionVers = versiculosMap[sesionId] ?? [];
+            const maxFin = Math.max(...sesionVers.filter((x) => x.capitulo_numero === capituloNum).map((x) => x.numero), versiculoNum);
+            setNotaState({ abreviatura, libroNombre, versiculoNum, capituloNum, versiculoFinMax: maxFin, notaExistente: notaPara(abreviatura, capituloNum, versiculoNum) });
+            setMenuState(null);
+          }}
+        />
+      )}
+
+      {notaState && (
+        <NotaModal
+          abreviatura_libro={notaState.abreviatura}
+          capitulo={notaState.capituloNum}
+          versiculoInicio={notaState.versiculoNum}
+          versiculoFinMax={notaState.versiculoFinMax}
+          notaExistente={notaState.notaExistente}
+          libroNombre={notaState.libroNombre}
+          onGuardar={async (datos) => {
+            await guardarNota({
+              abreviatura_libro: notaState.abreviatura,
+              capitulo: notaState.capituloNum,
+              versiculo_inicio: notaState.versiculoNum,
+              ...datos,
+            });
+          }}
+          onEliminar={notaState.notaExistente ? async () => {
+            await eliminarNota(notaState.notaExistente!);
+            setNotaState(null);
+          } : undefined}
+          onCerrar={() => setNotaState(null)}
         />
       )}
 
