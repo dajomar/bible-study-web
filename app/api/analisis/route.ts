@@ -19,7 +19,7 @@ export async function GET() {
       conexiones, preguntas_reflexion, modelo_usado, created_at,
       sesion:id_sesion (
         id, orden,
-        plan:id_plan ( id, nombre, id_usuario ),
+        plan:id_plan ( id, nombre, id_usuario, activo ),
         inicio:versiculo_inicio_id (
           numero,
           capitulo:id_capitulo (
@@ -44,8 +44,8 @@ export async function GET() {
 
   // Filtrar solo los que pertenecen al usuario
   const propios = (data ?? []).filter((a) => {
-    const plan = (a.sesion as unknown as { plan: { id_usuario: string } }).plan;
-    return plan?.id_usuario === user.id;
+    const plan = (a.sesion as unknown as { plan: { id_usuario: string; activo: boolean } }).plan;
+    return plan?.id_usuario === user.id && plan?.activo === true;
   });
 
   return NextResponse.json({ analisis: propios });
