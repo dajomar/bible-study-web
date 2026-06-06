@@ -9,17 +9,15 @@ export async function GET() {
 
   const hoy = new Date().toISOString().split("T")[0];
 
-  // Plan activo (el más reciente en caso de duplicados)
-  const { data: planesActivos } = await supabase
+  // Todos los planes activos
+  const { data: planesActivosRaw } = await supabase
     .from("bible_planes")
     .select("id, nombre")
     .eq("id_usuario", user.id)
     .eq("activo", true)
-    .order("created_at", { ascending: false })
-    .limit(1);
-  const plan = planesActivos?.[0] ?? null;
+    .order("created_at", { ascending: false });
 
-  // Otros planes (inactivos/archivados)
+  // Planes inactivos
   const { data: otrosPlanesRaw } = await supabase
     .from("bible_planes")
     .select("id, nombre")
@@ -27,7 +25,16 @@ export async function GET() {
     .eq("activo", false)
     .order("created_at", { ascending: false });
 
-  // Progreso de cada plan inactivo (en paralelo)
+  // Tareas pendientes (3 más recientes)
+  const { data: tareas } = await supabase
+    .from("bible_tareas")
+    .select("id, descripcion, origen, created_at")
+    .eq("id_usuario", user.id)
+    .eq("completada", false)
+    .order("created_at", { ascending: false })
+    .limit(3);
+
+  // Progreso de planes inactivos
   const otrosPlanes = await Promise.all(
     (otrosPlanesRaw ?? []).map(async (p) => {
       const [{ count: total }, { count: completadas }] = await Promise.all([
@@ -46,57 +53,56 @@ export async function GET() {
     })
   );
 
-  if (!plan) {
+  if (!planesActivosRaw?.length) {
     return NextResponse.json({
-      plan: null,
-      sesionHoy: null,
-      progreso: null,
-      tareasHoy: [],
+      planesActivos: [],
+      tareasHoy: tareas ?? [],
       otrosPlanes,
     });
   }
 
-  // Sesión programada para hoy
-  const { data: sesionHoy } = await supabase
-    .from("bible_sesiones")
-    .select(`
-      id, orden, completada, fecha_programada,
-      inicio:versiculo_inicio_id (
-        numero,
-        capitulo:id_capitulo ( numero, libro:id_libro ( nombre, abreviatura ) )
-      ),
-      fin:versiculo_fin_id (
-        numero,
-        capitulo:id_capitulo ( numero, libro:id_libro ( nombre, abreviatura ) )
-      )
-    `)
-    .eq("id_plan", plan.id)
-    .eq("fecha_programada", hoy)
-    .maybeSingle();
+  // Sesión del día + progreso para cada plan activo (en paralelo)
+  const planesActivos = await Promise.all(
+    planesActivosRaw.map(async (p) => {
+      const [sesionResult, totalResult, completadasResult] = await Promise.all([
+        supabase
+          .from("bible_sesiones")
+          .select(`
+            id, orden, completada, fecha_programada,
+            inicio:versiculo_inicio_id (
+              numero,
+              capitulo:id_capitulo ( numero, libro:id_libro ( nombre, abreviatura ) )
+            ),
+            fin:versiculo_fin_id (
+              numero,
+              capitulo:id_capitulo ( numero, libro:id_libro ( nombre, abreviatura ) )
+            )
+          `)
+          .eq("id_plan", p.id)
+          .eq("fecha_programada", hoy)
+          .maybeSingle(),
+        supabase.from("bible_sesiones").select("id", { count: "exact", head: true }).eq("id_plan", p.id),
+        supabase.from("bible_sesiones").select("id", { count: "exact", head: true }).eq("id_plan", p.id).eq("completada", true),
+      ]);
 
-  // Progreso del plan activo
-  const [{ count: total }, { count: completadas }] = await Promise.all([
-    supabase.from("bible_sesiones").select("id", { count: "exact", head: true }).eq("id_plan", plan.id),
-    supabase.from("bible_sesiones").select("id", { count: "exact", head: true }).eq("id_plan", plan.id).eq("completada", true),
-  ]);
+      const total = totalResult.count ?? 0;
+      const completadas = completadasResult.count ?? 0;
 
-  // Tareas pendientes (3 más recientes)
-  const { data: tareas } = await supabase
-    .from("bible_tareas")
-    .select("id, descripcion, origen, created_at")
-    .eq("id_usuario", user.id)
-    .eq("completada", false)
-    .order("created_at", { ascending: false })
-    .limit(3);
+      return {
+        id: p.id,
+        nombre: p.nombre,
+        sesionHoy: sesionResult.data ?? null,
+        progreso: {
+          total,
+          completadas,
+          porcentaje: total ? Math.round((completadas / total) * 100) : 0,
+        },
+      };
+    })
+  );
 
   return NextResponse.json({
-    plan: { id: plan.id, nombre: plan.nombre },
-    sesionHoy: sesionHoy ?? null,
-    progreso: {
-      total: total ?? 0,
-      completadas: completadas ?? 0,
-      porcentaje: total ? Math.round(((completadas ?? 0) / total) * 100) : 0,
-    },
+    planesActivos,
     tareasHoy: tareas ?? [],
     otrosPlanes,
   });

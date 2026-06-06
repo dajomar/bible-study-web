@@ -26,6 +26,13 @@ interface Tarea {
   created_at: string;
 }
 
+interface PlanActivo {
+  id: number;
+  nombre: string;
+  sesionHoy: SesionHoy | null;
+  progreso: { total: number; completadas: number; porcentaje: number };
+}
+
 interface OtroPlan {
   id: number;
   nombre: string;
@@ -33,9 +40,7 @@ interface OtroPlan {
 }
 
 interface DashboardData {
-  plan: { id: number; nombre: string } | null;
-  sesionHoy: SesionHoy | null;
-  progreso: { total: number; completadas: number; porcentaje: number } | null;
+  planesActivos: PlanActivo[];
   tareasHoy: Tarea[];
   otrosPlanes: OtroPlan[];
 }
@@ -93,12 +98,19 @@ export default function DashboardPage() {
         <h1 className="font-lora text-2xl md:text-3xl text-[#2C2C2C]">{saludo()}</h1>
       </div>
 
-      {!data.plan && <SinPlan tienePlanes={data.otrosPlanes.length > 0} />}
+      {data.planesActivos.length === 0 && (
+        <SinPlan tienePlanes={data.otrosPlanes.length > 0} />
+      )}
 
-      {data.plan && (
-        <div className="space-y-4 md:space-y-5">
-          <SesionCard sesion={data.sesionHoy} planNombre={data.plan.nombre} />
-          {data.progreso && <ProgresoCard progreso={data.progreso} planNombre={data.plan.nombre} />}
+      {data.planesActivos.length > 0 && (
+        <div className="space-y-6 md:space-y-8">
+          {data.planesActivos.map((plan) => (
+            <div key={plan.id} className="space-y-4 md:space-y-5">
+              <SesionCard sesion={plan.sesionHoy} planNombre={plan.nombre} />
+              <ProgresoCard progreso={plan.progreso} planNombre={plan.nombre} />
+            </div>
+          ))}
+
           {data.tareasHoy.length > 0 && <TareasCard tareas={data.tareasHoy} />}
           {data.otrosPlanes.length > 0 && <OtrosPlanesCard planes={data.otrosPlanes} />}
         </div>
@@ -146,7 +158,6 @@ function SesionCard({ sesion, planNombre }: { sesion: SesionHoy | null; planNomb
 
   return (
     <div className={`rounded-xl overflow-hidden border ${sesion.completada ? "border-[#E8E4DF]" : "border-[#4A6FA5]/30"}`}>
-      {/* Franja de acento superior cuando hay sesión activa */}
       {!sesion.completada && <div className="h-1 bg-[#4A6FA5]" />}
 
       <div className="p-5 md:p-6">
@@ -198,7 +209,6 @@ function ProgresoCard({
         <p className="font-lora text-lg text-[#4A6FA5]">{progreso.porcentaje}%</p>
       </div>
 
-      {/* Barra de progreso */}
       <div className="h-2 bg-[#E8E4DF] rounded-full overflow-hidden mb-4">
         <div
           className="h-full bg-[#4A6FA5] rounded-full transition-all duration-700"
@@ -206,7 +216,6 @@ function ProgresoCard({
         />
       </div>
 
-      {/* Stats */}
       <div className="flex items-center gap-6">
         <div>
           <p className="font-lora text-xl text-[#2C2C2C]">{progreso.completadas}</p>
@@ -281,7 +290,7 @@ function OtrosPlanesCard({ planes }: { planes: OtroPlan[] }) {
               </span>
             </div>
             <div className="h-1 bg-[#E8E4DF] rounded-full overflow-hidden">
-              <div className="h-full bg-[#E8E4DF] rounded-full" style={{ width: `${p.progreso.porcentaje}%`, backgroundColor: "#CBD5E1" }} />
+              <div className="h-full rounded-full" style={{ width: `${p.progreso.porcentaje}%`, backgroundColor: "#CBD5E1" }} />
             </div>
           </div>
         ))}
@@ -319,18 +328,6 @@ function LoadingSkeleton() {
               </div>
             ))}
           </div>
-        </div>
-        <div className="border border-[#E8E4DF] rounded-xl p-5 md:p-6">
-          <div className="h-3 w-28 bg-[#E8E4DF] rounded mb-5 animate-pulse" />
-          {[...Array(3)].map((_, i) => (
-            <div key={i} className="flex gap-3 mb-4">
-              <div className="mt-2 w-1.5 h-1.5 rounded-full bg-[#E8E4DF] shrink-0" />
-              <div className="flex-1">
-                <div className="h-4 bg-[#E8E4DF] rounded mb-1 animate-pulse" />
-                <div className="h-3 w-16 bg-[#E8E4DF] rounded animate-pulse" />
-              </div>
-            </div>
-          ))}
         </div>
       </div>
     </main>
