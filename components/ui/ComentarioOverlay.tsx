@@ -38,7 +38,7 @@ function romanToInt(roman: string): number {
 function convertirRomanosArabigos(texto: string): string {
   // Lookahead requiere dígito tras la coma/punto — evita falsos positivos en fin de frase
   return texto.replace(
-    /\b(M{0,4}(?:CM|CD|D?C{0,3})(?:XC|XL|L?X{0,3})(?:IX|IV|V?I{0,3}))\b(?=\s*[,.]\s*\d)/gi,
+    /(?<=\s)(M{0,4}(?:CM|CD|D?C{0,3})(?:XC|XL|L?X{0,3})(?:IX|IV|V?I{0,3}))\b(?=\s*[,.]\s*\d)/gi,
     (match) => {
       const num = romanToInt(match);
       return num > 0 && num <= 200 ? String(num) : match;
