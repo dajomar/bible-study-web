@@ -308,6 +308,10 @@ function ContenidoNota({
           rows={5}
           className="font-inter text-sm text-[#2C2C2C] w-full resize-none border border-[#E8E4DF] rounded-xl px-4 py-3 focus:outline-none focus:border-[#4A6FA5] bg-white placeholder:text-[#C0BAB3] leading-6"
         />
+        <p className="font-inter text-xs text-right tabular-nums"
+          style={{ color: texto.length > 500 ? "#F87171" : "#C0BAB3" }}>
+          {texto.length} caracteres
+        </p>
       </div>
 
       {/* Footer */}

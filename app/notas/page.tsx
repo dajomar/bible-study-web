@@ -28,9 +28,53 @@ interface Grupo {
 
 const COLORES_ORDEN = ["amarillo", "verde", "azul", "rosado"] as const;
 
+function exportarNotas(notas: NotaDetalle[]) {
+  const fecha = new Date().toLocaleDateString("es-ES", {
+    day: "numeric", month: "long", year: "numeric",
+  });
+
+  const lineas: string[] = [
+    "MIS NOTAS BÍBLICAS",
+    `Exportado el ${fecha}`,
+    "",
+  ];
+
+  const porTestamento = (t: string) => notas.filter((n) => n.libro.testamento === t);
+
+  for (const [titulo, test] of [["ANTIGUO TESTAMENTO", "Antiguo"], ["NUEVO TESTAMENTO", "Nuevo"]] as const) {
+    const grupo = porTestamento(test);
+    if (!grupo.length) continue;
+
+    lineas.push(`━━━ ${titulo} ${"━".repeat(Math.max(0, 40 - titulo.length - 5))}`);
+    lineas.push("");
+
+    const libros = Array.from(new Map(grupo.map((n) => [n.abreviatura_libro, n.libro])).entries());
+    for (const [abrev, libro] of libros) {
+      lineas.push(libro.nombre.toUpperCase());
+      for (const n of grupo.filter((x) => x.abreviatura_libro === abrev)) {
+        const rango = n.versiculo_fin > n.versiculo_inicio
+          ? `${n.capitulo}:${n.versiculo_inicio}–${n.versiculo_fin}`
+          : `${n.capitulo}:${n.versiculo_inicio}`;
+        lineas.push(`  ${n.abreviatura_libro} ${rango}`);
+        lineas.push(`  ${n.texto}`);
+        lineas.push("");
+      }
+    }
+  }
+
+  const blob = new Blob([lineas.join("\n")], { type: "text/plain;charset=utf-8" });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = `notas-biblicas-${new Date().toISOString().slice(0, 10)}.txt`;
+  a.click();
+  URL.revokeObjectURL(url);
+}
+
 export default function NotasPage() {
   const [notas, setNotas] = useState<NotaDetalle[]>([]);
   const [loading, setLoading] = useState(true);
+  const [filtroColor, setFiltroColor] = useState<string | null>(null);
 
   useEffect(() => {
     apiClient
@@ -55,39 +99,76 @@ export default function NotasPage() {
     await apiClient.put(`/api/notas/${id}`, { texto, color });
   }
 
-  const antiguo = agrupar(
-    notas.filter((n) => n.libro.testamento === "Antiguo"),
-  );
-  const nuevo = agrupar(
-    notas.filter((n) => n.libro.testamento === "Nuevo"),
-  );
+  const notasFiltradas = filtroColor ? notas.filter((n) => n.color === filtroColor) : notas;
+  const antiguo = agrupar(notasFiltradas.filter((n) => n.libro.testamento === "Antiguo"));
+  const nuevo   = agrupar(notasFiltradas.filter((n) => n.libro.testamento === "Nuevo"));
 
   return (
     <main className="max-w-3xl mx-auto px-4 md:px-6 py-8 md:py-12">
       {/* Encabezado */}
-      <div className="mb-8 md:mb-10 flex items-start justify-between">
-        <div>
-          <h1 className="font-lora text-2xl md:text-3xl text-[#2C2C2C]">Mis Notas</h1>
-          {!loading && (
-            <p className="font-inter text-sm text-[#8A8A8A] mt-1">
-              {notas.length === 0
-                ? "Aún no tienes notas"
-                : `${notas.length} nota${notas.length !== 1 ? "s" : ""}`}
-            </p>
+      <div className="mb-6 md:mb-8">
+        <div className="flex items-start justify-between mb-4">
+          <div>
+            <h1 className="font-lora text-2xl md:text-3xl text-[#2C2C2C]">Mis Notas</h1>
+            {!loading && (
+              <p className="font-inter text-sm text-[#8A8A8A] mt-1">
+                {notas.length === 0
+                  ? "Aún no tienes notas"
+                  : filtroColor
+                    ? `${notasFiltradas.length} de ${notas.length} nota${notas.length !== 1 ? "s" : ""}`
+                    : `${notas.length} nota${notas.length !== 1 ? "s" : ""}`}
+              </p>
+            )}
+          </div>
+
+          {/* Botón exportar */}
+          {!loading && notas.length > 0 && (
+            <button
+              onClick={() => exportarNotas(notasFiltradas.length ? notasFiltradas : notas)}
+              className="shrink-0 font-inter text-xs text-[#8A8A8A] hover:text-[#4A6FA5] border border-[#E8E4DF] hover:border-[#4A6FA5]/50 px-3 py-1.5 rounded-lg transition-colors mt-1"
+              title="Exportar notas como texto"
+            >
+              Exportar .txt
+            </button>
           )}
         </div>
 
-        {/* Leyenda de colores */}
+        {/* Filtro por color */}
         {!loading && notas.length > 0 && (
-          <div className="flex items-center gap-1.5 shrink-0 mt-1">
-            {COLORES_ORDEN.map((token) => (
-              <span
-                key={token}
-                style={{ backgroundColor: COLORES_NOTA[token].swatch }}
-                className="w-3.5 h-3.5 rounded-full"
-                title={token.charAt(0).toUpperCase() + token.slice(1)}
-              />
-            ))}
+          <div className="flex items-center gap-2">
+            <button
+              onClick={() => setFiltroColor(null)}
+              className={`font-inter text-xs px-3 py-1 rounded-full border transition-colors ${
+                filtroColor === null
+                  ? "bg-[#4A6FA5] text-white border-[#4A6FA5]"
+                  : "text-[#8A8A8A] border-[#E8E4DF] hover:border-[#4A6FA5]/50 hover:text-[#4A6FA5]"
+              }`}
+            >
+              Todas
+            </button>
+            {COLORES_ORDEN.map((token) => {
+              const tiene = notas.some((n) => n.color === token);
+              if (!tiene) return null;
+              const activo = filtroColor === token;
+              return (
+                <button
+                  key={token}
+                  onClick={() => setFiltroColor(activo ? null : token)}
+                  className={`flex items-center gap-1.5 font-inter text-xs px-3 py-1 rounded-full border transition-colors ${
+                    activo
+                      ? "border-[#4A6FA5] text-[#4A6FA5] bg-[#4A6FA5]/8"
+                      : "text-[#8A8A8A] border-[#E8E4DF] hover:border-[#4A6FA5]/50 hover:text-[#4A6FA5]"
+                  }`}
+                  title={token.charAt(0).toUpperCase() + token.slice(1)}
+                >
+                  <span
+                    style={{ backgroundColor: COLORES_NOTA[token].swatch }}
+                    className="w-2.5 h-2.5 rounded-full shrink-0"
+                  />
+                  {token.charAt(0).toUpperCase() + token.slice(1)}
+                </button>
+              );
+            })}
           </div>
         )}
       </div>
@@ -282,6 +363,12 @@ function NotaCard({
             rows={4}
             className="font-inter text-sm text-[#2C2C2C] w-full resize-none border border-[#E8E4DF] rounded-lg px-3 py-2.5 focus:outline-none focus:border-[#4A6FA5] bg-white placeholder:text-[#C0BAB3] leading-6"
           />
+          <p
+            className="font-inter text-xs text-right tabular-nums mt-1"
+            style={{ color: editTexto.length > 500 ? "#F87171" : "#C0BAB3" }}
+          >
+            {editTexto.length} caracteres
+          </p>
         </div>
 
         {/* Footer edición */}
