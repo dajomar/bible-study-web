@@ -52,6 +52,8 @@ export interface NotaModalProps {
   versiculoFinMax: number;
   notaExistente?: Nota | null;
   libroNombre: string;
+  /** Versículos del capítulo para mostrar el texto anotado en el modal. */
+  versiculosCapitulo?: { numero: number; texto: string }[];
   onGuardar: (datos: { versiculo_fin: number; texto: string; color: string }) => void;
   onEliminar?: () => void;
   onCerrar: () => void;
@@ -181,6 +183,7 @@ function ContenidoNota({
   versiculoFinMax,
   notaExistente,
   libroNombre,
+  versiculosCapitulo,
   onGuardar,
   onEliminar,
   onCerrar,
@@ -196,6 +199,10 @@ function ContenidoNota({
   useEffect(() => {
     textareaRef.current?.focus();
   }, []);
+
+  const versiculosEnRango = (versiculosCapitulo ?? []).filter(
+    (v) => v.numero >= versiculoInicio && v.numero <= versiculoFin
+  );
 
   const rangoLabel =
     versiculoFin > versiculoInicio
@@ -250,8 +257,25 @@ function ContenidoNota({
         </button>
       </div>
 
-      {/* Body: color + textarea */}
+      {/* Body: texto bíblico + color + textarea */}
       <div className="overflow-y-auto px-6 py-5 flex-1 flex flex-col gap-4">
+        {/* Texto del versículo anotado */}
+        {versiculosEnRango.length > 0 && (
+          <div
+            className="rounded-lg px-4 py-3 border-l-2 border-[#4A6FA5] max-h-28 overflow-y-auto"
+            style={{ backgroundColor: "#F0EDE8" }}
+          >
+            {versiculosEnRango.map((v) => (
+              <p key={v.numero} className="font-lora text-sm text-[#2C2C2C] leading-6">
+                <span className="text-[#8A8A8A] text-xs align-super mr-1 font-inter not-italic">
+                  {v.numero}
+                </span>
+                {v.texto}
+              </p>
+            ))}
+          </div>
+        )}
+
         {/* Colores */}
         <div className="flex items-center gap-3">
           {COLORES_ORDEN.map((token) => (
@@ -274,7 +298,13 @@ function ContenidoNota({
           ref={textareaRef}
           value={texto}
           onChange={(e) => setTexto(e.target.value)}
-          placeholder="Escribe tu nota..."
+          onKeyDown={(e) => {
+            if ((e.ctrlKey || e.metaKey) && e.key === "Enter") {
+              e.preventDefault();
+              handleGuardar();
+            }
+          }}
+          placeholder="Escribe tu nota… (Ctrl+Enter para guardar)"
           rows={5}
           className="font-inter text-sm text-[#2C2C2C] w-full resize-none border border-[#E8E4DF] rounded-xl px-4 py-3 focus:outline-none focus:border-[#4A6FA5] bg-white placeholder:text-[#C0BAB3] leading-6"
         />

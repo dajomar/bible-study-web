@@ -9,7 +9,7 @@ import { useComentarios, type Comentario } from "@/hooks/useComentarios";
 import { useNotas, type Nota } from "@/hooks/useNotas";
 import { FloatingVerseMenu, COLORES_RESALTADO } from "@/components/ui/FloatingVerseMenu";
 import { ComentarioIcono, ComentarioOverlay } from "@/components/ui/ComentarioOverlay";
-import { NotaIcono, NotaModal } from "@/components/ui/NotaModal";
+import { NotaIcono, NotaModal, COLORES_NOTA } from "@/components/ui/NotaModal";
 
 interface CapituloInfo {
   numero: number;
@@ -93,7 +93,7 @@ export default function EstudioPage() {
   const [copiado, setCopiado] = useState<number | null>(null);
   const { resaltados, cargar, guardar, quitar } = useResaltados();
   const { cargar: cargarComentarios, comentarioPara } = useComentarios();
-  const { cargar: cargarNotas, notaPara, guardar: guardarNota, eliminar: eliminarNota } = useNotas();
+  const { cargar: cargarNotas, notaPara, notaEnRango, guardar: guardarNota, eliminar: eliminarNota } = useNotas();
   const [comentarioAbierto, setComentarioAbierto] = useState<Comentario | null>(null);
   const [notaState, setNotaState] = useState<{
     versiculoId: number;
@@ -322,9 +322,11 @@ export default function EstudioPage() {
                   style={{
                     backgroundColor: copiado === v.id
                       ? undefined
-                      : resaltados[v.id]
-                        ? COLORES_RESALTADO[resaltados[v.id]].bg
-                        : undefined,
+                      : (() => {
+                          const n = notaEnRango(abrevEstudio, v.capitulo_numero, v.numero);
+                          if (n) return COLORES_NOTA[n.color]?.bg;
+                          return resaltados[v.id] ? COLORES_RESALTADO[resaltados[v.id]].bg : undefined;
+                        })(),
                   }}
                   className={`font-lora ${FONT_SIZES[tamano]} text-[#2C2C2C] rounded-md px-2 -mx-2 cursor-pointer transition-colors ${
                     copiado === v.id
@@ -406,6 +408,9 @@ export default function EstudioPage() {
           versiculoFinMax={notaState.versiculoFinMax}
           notaExistente={notaState.notaExistente}
           libroNombre={sesion.capituloInicio.libro.nombre}
+          versiculosCapitulo={versiculos
+            .filter((v) => v.capitulo_numero === notaState.capituloNum)
+            .map((v) => ({ numero: v.numero, texto: v.texto }))}
           onGuardar={async (datos) => {
             await guardarNota({
               abreviatura_libro: abrevEstudio,

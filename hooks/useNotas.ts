@@ -37,12 +37,24 @@ export function useNotas() {
     }
   }, [cache, cargando]);
 
-  /** Nota que *empieza* exactamente en este versículo. */
+  /** Nota que *empieza* exactamente en este versículo (para el ícono). */
   const notaPara = useCallback(
     (abreviatura: string, capitulo: number, versiculoNum: number): Nota | null => {
       return (
         (cache[`${abreviatura}_${capitulo}`] ?? []).find(
           (n) => n.versiculo_inicio === versiculoNum
+        ) ?? null
+      );
+    },
+    [cache]
+  );
+
+  /** Nota cuyo rango *cubre* este versículo (para el fondo coloreado). */
+  const notaEnRango = useCallback(
+    (abreviatura: string, capitulo: number, versiculoNum: number): Nota | null => {
+      return (
+        (cache[`${abreviatura}_${capitulo}`] ?? []).find(
+          (n) => n.versiculo_inicio <= versiculoNum && versiculoNum <= n.versiculo_fin
         ) ?? null
       );
     },
@@ -88,5 +100,5 @@ export function useNotas() {
     }
   }, []);
 
-  return { cargar, notaPara, guardar, eliminar };
+  return { cargar, notaPara, notaEnRango, guardar, eliminar };
 }

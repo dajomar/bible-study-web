@@ -8,7 +8,7 @@ import { useComentarios, type Comentario } from "@/hooks/useComentarios";
 import { useNotas, type Nota } from "@/hooks/useNotas";
 import { FloatingVerseMenu, COLORES_RESALTADO } from "@/components/ui/FloatingVerseMenu";
 import { ComentarioIcono, ComentarioOverlay } from "@/components/ui/ComentarioOverlay";
-import { NotaIcono, NotaModal } from "@/components/ui/NotaModal";
+import { NotaIcono, NotaModal, COLORES_NOTA } from "@/components/ui/NotaModal";
 
 interface Libro {
   id: number;
@@ -164,7 +164,7 @@ function BibliaContent() {
   const [modo, setModo] = useState<Modo>("referencia");
   const { resaltados, cargar, guardar, quitar } = useResaltados();
   const { cargar: cargarComentarios, comentarioPara } = useComentarios();
-  const { cargar: cargarNotas, notaPara, guardar: guardarNota, eliminar: eliminarNota } = useNotas();
+  const { cargar: cargarNotas, notaPara, notaEnRango, guardar: guardarNota, eliminar: eliminarNota } = useNotas();
   const [comentarioAbierto, setComentarioAbierto] = useState<Comentario | null>(null);
   const [notaState, setNotaState] = useState<{
     versiculoNum: number;
@@ -813,9 +813,12 @@ function BibliaContent() {
                       style={{
                         backgroundColor: copiado === v.id || destacado
                           ? undefined
-                          : resaltados[v.id]
-                            ? COLORES_RESALTADO[resaltados[v.id]].bg
-                            : undefined,
+                          : (() => {
+                              const abrev = libroSeleccionado?.abreviatura ?? "";
+                              const n = notaEnRango(abrev, Number(capituloNum), v.numero);
+                              if (n) return COLORES_NOTA[n.color]?.bg;
+                              return resaltados[v.id] ? COLORES_RESALTADO[resaltados[v.id]].bg : undefined;
+                            })(),
                       }}
                       className={`font-lora ${FONT_SIZES[tamano].clase} rounded-md px-2 -mx-2 cursor-pointer transition-colors duration-500 ${
                         copiado === v.id ? "bg-[#4A6FA5]/10 text-[#4A6FA5]"
@@ -904,6 +907,7 @@ function BibliaContent() {
           versiculoFinMax={notaState.versiculoFinMax}
           notaExistente={notaState.notaExistente}
           libroNombre={libroSeleccionado.nombre}
+          versiculosCapitulo={versiculos.map((v) => ({ numero: v.numero, texto: v.texto }))}
           onGuardar={async (datos) => {
             await guardarNota({
               abreviatura_libro: libroSeleccionado.abreviatura,

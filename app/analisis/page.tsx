@@ -8,7 +8,7 @@ import { useComentarios, type Comentario } from "@/hooks/useComentarios";
 import { useNotas, type Nota } from "@/hooks/useNotas";
 import { FloatingVerseMenu, COLORES_RESALTADO } from "@/components/ui/FloatingVerseMenu";
 import { ComentarioIcono, ComentarioOverlay } from "@/components/ui/ComentarioOverlay";
-import { NotaIcono, NotaModal } from "@/components/ui/NotaModal";
+import { NotaIcono, NotaModal, COLORES_NOTA } from "@/components/ui/NotaModal";
 
 interface CapituloInfo {
   numero: number;
@@ -98,9 +98,10 @@ function AnalisisContent() {
   const [copiado, setCopiad] = useState<number | null>(null);
   const { resaltados, cargar, guardar, quitar } = useResaltados();
   const { cargar: cargarComentarios, comentarioPara } = useComentarios();
-  const { cargar: cargarNotas, notaPara, guardar: guardarNota, eliminar: eliminarNota } = useNotas();
+  const { cargar: cargarNotas, notaPara, notaEnRango, guardar: guardarNota, eliminar: eliminarNota } = useNotas();
   const [comentarioAbierto, setComentarioAbierto] = useState<Comentario | null>(null);
   const [notaState, setNotaState] = useState<{
+    sesionId: number;
     abreviatura: string;
     libroNombre: string;
     versiculoNum: number;
@@ -402,9 +403,12 @@ function AnalisisContent() {
                                   style={{
                                     backgroundColor: copiado === v.id
                                       ? undefined
-                                      : resaltados[v.id]
-                                        ? COLORES_RESALTADO[resaltados[v.id]].bg
-                                        : undefined,
+                                      : (() => {
+                                          const abrev = a.sesion.inicio.capitulo.libro.abreviatura;
+                                          const n = notaEnRango(abrev, v.capitulo_numero, v.numero);
+                                          if (n) return COLORES_NOTA[n.color]?.bg;
+                                          return resaltados[v.id] ? COLORES_RESALTADO[resaltados[v.id]].bg : undefined;
+                                        })(),
                                   }}
                                   className={`font-lora ${FONT_SIZES[tamano]} text-[#2C2C2C] rounded-md px-2 -mx-2 cursor-pointer transition-colors ${
                                     copiado === v.id
@@ -423,7 +427,7 @@ function AnalisisContent() {
                                     return nota ? <NotaIcono nota={nota} onAbrir={(n) => {
                                       const sesionVers = versiculosMap[a.sesion.id] ?? [];
                                       const maxFin = Math.max(...sesionVers.filter((x) => x.capitulo_numero === v.capitulo_numero).map((x) => x.numero), v.numero);
-                                      setNotaState({ abreviatura: abrev, libroNombre: a.sesion.inicio.capitulo.libro.nombre, versiculoNum: v.numero, capituloNum: v.capitulo_numero, versiculoFinMax: maxFin, notaExistente: n });
+                                      setNotaState({ sesionId: a.sesion.id, abreviatura: abrev, libroNombre: a.sesion.inicio.capitulo.libro.nombre, versiculoNum: v.numero, capituloNum: v.capitulo_numero, versiculoFinMax: maxFin, notaExistente: n });
                                     }} /> : null;
                                   })()}
                                   {copiado === v.id && (
@@ -469,7 +473,7 @@ function AnalisisContent() {
             const { versiculoNum, capituloNum, abreviatura, libroNombre, sesionId } = menuState;
             const sesionVers = versiculosMap[sesionId] ?? [];
             const maxFin = Math.max(...sesionVers.filter((x) => x.capitulo_numero === capituloNum).map((x) => x.numero), versiculoNum);
-            setNotaState({ abreviatura, libroNombre, versiculoNum, capituloNum, versiculoFinMax: maxFin, notaExistente: notaPara(abreviatura, capituloNum, versiculoNum) });
+            setNotaState({ sesionId, abreviatura, libroNombre, versiculoNum, capituloNum, versiculoFinMax: maxFin, notaExistente: notaPara(abreviatura, capituloNum, versiculoNum) });
             setMenuState(null);
           }}
         />
@@ -483,6 +487,9 @@ function AnalisisContent() {
           versiculoFinMax={notaState.versiculoFinMax}
           notaExistente={notaState.notaExistente}
           libroNombre={notaState.libroNombre}
+          versiculosCapitulo={(versiculosMap[notaState.sesionId] ?? [])
+            .filter((v) => v.capitulo_numero === notaState.capituloNum)
+            .map((v) => ({ numero: v.numero, texto: v.texto }))}
           onGuardar={async (datos) => {
             await guardarNota({
               abreviatura_libro: notaState.abreviatura,
