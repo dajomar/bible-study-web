@@ -1,7 +1,7 @@
 "use client";
 
-import { useEffect, useState } from "react";
-import { useRouter } from "next/navigation";
+import { useEffect, useRef, useState, Suspense } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
 import apiClient from "@/lib/axios";
 import { useResaltados } from "@/hooks/useResaltados";
 import { FloatingVerseMenu, COLORES_RESALTADO } from "@/components/ui/FloatingVerseMenu";
@@ -71,7 +71,19 @@ function formatFecha(iso: string): string {
 }
 
 export default function AnalisisPage() {
+  return (
+    <Suspense>
+      <AnalisisContent />
+    </Suspense>
+  );
+}
+
+function AnalisisContent() {
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const sesionParam = searchParams.get("sesion");
+  const cardRefs = useRef<Record<number, HTMLDivElement | null>>({});
+
   const [lista, setLista] = useState<Analisis[]>([]);
   const [loading, setLoading] = useState(true);
   const [abierto, setAbierto] = useState<number | null>(null);
@@ -118,9 +130,37 @@ export default function AnalisisPage() {
   useEffect(() => {
     apiClient
       .get<{ analisis: Analisis[] }>("/api/analisis")
-      .then((res) => setLista(res.data.analisis))
+      .then((res) => {
+        const data = res.data.analisis;
+        setLista(data);
+
+        if (sesionParam) {
+          const sesionId = Number(sesionParam);
+          const target = data.find((a) => a.sesion.id === sesionId);
+          if (target) {
+            setAbierto(target.id);
+            // Cargar versículos de esa sesión
+            apiClient
+              .get<{ versiculos: Versiculo[]; secciones: Seccion[] }>(`/api/sesion/${sesionId}/versiculos`)
+              .then((r) => {
+                setVersiculosMap((prev) => ({ ...prev, [sesionId]: r.data.versiculos }));
+                setSeccionesMap((prev) => ({ ...prev, [sesionId]: r.data.secciones ?? [] }));
+                cargar(r.data.versiculos.map((v: Versiculo) => v.id));
+              });
+          }
+        }
+      })
       .finally(() => setLoading(false));
-  }, []);
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Scroll a la card cuando se haya expandido via param
+  useEffect(() => {
+    if (!sesionParam || loading || !abierto) return;
+    const lista_encontrada = lista.find((a) => a.sesion.id === Number(sesionParam));
+    if (!lista_encontrada) return;
+    const el = cardRefs.current[lista_encontrada.id];
+    if (el) setTimeout(() => el.scrollIntoView({ behavior: "smooth", block: "start" }), 100);
+  }, [loading, abierto]); // eslint-disable-line react-hooks/exhaustive-deps
 
   async function toggle(analisis: Analisis) {
     const { id, sesion } = analisis;
@@ -193,7 +233,7 @@ export default function AnalisisPage() {
             const cargandoVers = loadingVers === a.id;
 
             return (
-              <div key={a.id} className="border border-[#E8E4DF] rounded-xl overflow-hidden">
+              <div key={a.id} ref={(el) => { cardRefs.current[a.id] = el; }} className="border border-[#E8E4DF] rounded-xl overflow-hidden">
                 {/* Cabecera */}
                 <button
                   onClick={() => toggle(a)}

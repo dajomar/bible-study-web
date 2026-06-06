@@ -169,6 +169,14 @@ function SesionCard({ sesion, planNombre }: { sesion: SesionHoy | null; planNomb
             Comenzar sesión →
           </Link>
         )}
+        {sesion.completada && (
+          <Link
+            href={`/analisis?sesion=${sesion.id}`}
+            className="inline-block font-inter text-sm text-[#4A6FA5] hover:text-[#3d5f8f] transition-colors"
+          >
+            Ver análisis →
+          </Link>
+        )}
       </div>
     </div>
   );
