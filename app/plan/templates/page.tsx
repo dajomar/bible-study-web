@@ -107,16 +107,15 @@ export default function TemplatesPage() {
   const [loadingDetalle, setLoadingDetalle] = useState(false);
 
   const [modalAbierto, setModalAbierto] = useState(false);
-  const [version, setVersion] = useState("RVR1960");
-  const [nombrePlan, setNombrePlan] = useState("");
-  const [adoptando, setAdoptando] = useState(false);
-  const [errorAdoptar, setErrorAdoptar] = useState("");
+  const [versionPerfil, setVersionPerfil] = useState("RVR1960");
 
   useEffect(() => {
-    apiClient
-      .get<{ templates: Template[] }>("/api/plan/templates")
+    apiClient.get<{ templates: Template[] }>("/api/plan/templates")
       .then((res) => setTemplates(res.data.templates))
       .finally(() => setLoading(false));
+
+    apiClient.get<{ usuario: { version_biblica: string } }>("/api/usuario")
+      .then((res) => setVersionPerfil(res.data.usuario.version_biblica ?? "RVR1960"));
   }, []);
 
   async function verDetalle(t: Template) {
@@ -131,31 +130,6 @@ export default function TemplatesPage() {
       setLibrosMap(res.data.librosMap ?? {});
     } finally {
       setLoadingDetalle(false);
-    }
-  }
-
-  function abrirModal() {
-    if (!selected) return;
-    setNombrePlan(selected.titulo);
-    setVersion("RVR1960");
-    setErrorAdoptar("");
-    setModalAbierto(true);
-  }
-
-  async function handleAdoptar() {
-    if (!selected || !nombrePlan.trim()) return;
-    setAdoptando(true);
-    setErrorAdoptar("");
-    try {
-      await apiClient.post("/api/plan/adoptar", {
-        id_template: selected.id,
-        version_biblica: version,
-        nombre_plan: nombrePlan.trim(),
-      });
-      router.push("/plan");
-    } catch {
-      setErrorAdoptar("No se pudo crear el plan. Inténtalo de nuevo.");
-      setAdoptando(false);
     }
   }
 
@@ -344,94 +318,137 @@ export default function TemplatesPage() {
       {/* CTA */}
       <div className="pt-2">
         <button
-          onClick={abrirModal}
+          onClick={() => setModalAbierto(true)}
           className="w-full sm:w-auto bg-[#4A6FA5] text-white font-inter text-sm font-medium px-8 py-3.5 rounded-lg hover:bg-[#3d5f8f] transition-colors"
         >
           Comenzar este camino
         </button>
       </div>
 
-      {/* Modal de adopción */}
-      {modalAbierto && (
-        <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center px-4 pb-4 sm:pb-0">
-          <div className="absolute inset-0 bg-black/30" onClick={() => !adoptando && setModalAbierto(false)} />
-          <div className="relative bg-white rounded-2xl w-full max-w-md shadow-xl p-6 space-y-5">
-            <div>
-              <h2 className="font-lora text-xl text-[#2C2C2C] mb-1">Crear mi plan</h2>
-              <p className="font-inter text-sm text-[#8A8A8A]">
-                Personaliza cómo se llamará y en qué versión leerás.
-              </p>
-            </div>
-
-            <div>
-              <label className="block font-inter text-xs text-[#8A8A8A] uppercase tracking-wide mb-1.5">
-                Nombre del plan
-              </label>
-              <input
-                type="text"
-                value={nombrePlan}
-                onChange={(e) => setNombrePlan(e.target.value)}
-                disabled={adoptando}
-                maxLength={80}
-                className="w-full border border-[#E8E4DF] rounded-lg px-4 py-3 font-inter text-sm text-[#2C2C2C] bg-[#FAF8F5] outline-none focus:border-[#4A6FA5] transition-colors disabled:opacity-50"
-              />
-            </div>
-
-            <div>
-              <label className="block font-inter text-xs text-[#8A8A8A] uppercase tracking-wide mb-2">
-                Versión bíblica
-              </label>
-              <div className="grid grid-cols-2 gap-2">
-                {VERSIONES.map((v) => (
-                  <button
-                    key={v.valor}
-                    type="button"
-                    onClick={() => setVersion(v.valor)}
-                    disabled={adoptando}
-                    className={`border rounded-lg px-3 py-2.5 text-left transition-colors disabled:opacity-50 ${
-                      version === v.valor
-                        ? "border-[#4A6FA5] bg-[#4A6FA5]/5"
-                        : "border-[#E8E4DF] hover:border-[#4A6FA5]/40 bg-[#FAF8F5]"
-                    }`}
-                  >
-                    <p className={`font-inter text-sm font-medium ${version === v.valor ? "text-[#4A6FA5]" : "text-[#2C2C2C]"}`}>
-                      {v.label}
-                    </p>
-                    <p className="font-inter text-xs text-[#8A8A8A] mt-0.5">{v.desc}</p>
-                  </button>
-                ))}
-              </div>
-            </div>
-
-            {errorAdoptar && (
-              <p className="font-inter text-xs text-red-500">{errorAdoptar}</p>
-            )}
-
-            <div className="flex gap-3 pt-1">
-              <button
-                onClick={() => setModalAbierto(false)}
-                disabled={adoptando}
-                className="flex-1 border border-[#E8E4DF] font-inter text-sm text-[#8A8A8A] py-3 rounded-lg hover:bg-[#FAF8F5] transition-colors disabled:opacity-40"
-              >
-                Cancelar
-              </button>
-              <button
-                onClick={handleAdoptar}
-                disabled={adoptando || !nombrePlan.trim()}
-                className="flex-1 bg-[#4A6FA5] text-white font-inter text-sm font-medium py-3 rounded-lg hover:bg-[#3d5f8f] transition-colors disabled:opacity-40 flex items-center justify-center gap-2"
-              >
-                {adoptando ? (
-                  <>
-                    <span className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
-                    Creando...
-                  </>
-                ) : "Crear mi plan"}
-              </button>
-            </div>
-          </div>
-        </div>
+      {/* Modal de adopción — componente propio para aislar el estado de versión */}
+      {modalAbierto && selected && (
+        <ModalAdoptar
+          defaultVersion={versionPerfil}
+          template={selected}
+          onClose={() => setModalAbierto(false)}
+          onSuccess={() => router.push("/plan")}
+        />
       )}
     </main>
+  );
+}
+
+/* ── Modal de adopción ────────────────────────────────────── */
+
+function ModalAdoptar({
+  defaultVersion,
+  template,
+  onClose,
+  onSuccess,
+}: {
+  defaultVersion: string;
+  template: Template;
+  onClose: () => void;
+  onSuccess: () => void;
+}) {
+  const [version, setVersion] = useState(defaultVersion);
+  const [nombrePlan, setNombrePlan] = useState(template.titulo);
+  const [adoptando, setAdoptando] = useState(false);
+  const [error, setError] = useState("");
+
+  async function handleAdoptar() {
+    if (!nombrePlan.trim()) return;
+    setAdoptando(true);
+    setError("");
+    try {
+      await apiClient.post("/api/plan/adoptar", {
+        id_template: template.id,
+        version_biblica: version,
+        nombre_plan: nombrePlan.trim(),
+      });
+      onSuccess();
+    } catch {
+      setError("No se pudo crear el plan. Inténtalo de nuevo.");
+      setAdoptando(false);
+    }
+  }
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center px-4 pb-4 sm:pb-0">
+      <div className="absolute inset-0 bg-black/30" onClick={() => !adoptando && onClose()} />
+      <div className="relative bg-white rounded-2xl w-full max-w-md shadow-xl p-6 space-y-5">
+        <div>
+          <h2 className="font-lora text-xl text-[#2C2C2C] mb-1">Crear mi plan</h2>
+          <p className="font-inter text-sm text-[#8A8A8A]">
+            Personaliza cómo se llamará y en qué versión leerás.
+          </p>
+        </div>
+
+        <div>
+          <label className="block font-inter text-xs text-[#8A8A8A] uppercase tracking-wide mb-1.5">
+            Nombre del plan
+          </label>
+          <input
+            type="text"
+            value={nombrePlan}
+            onChange={(e) => setNombrePlan(e.target.value)}
+            disabled={adoptando}
+            maxLength={80}
+            className="w-full border border-[#E8E4DF] rounded-lg px-4 py-3 font-inter text-sm text-[#2C2C2C] bg-[#FAF8F5] outline-none focus:border-[#4A6FA5] transition-colors disabled:opacity-50"
+          />
+        </div>
+
+        <div>
+          <label className="block font-inter text-xs text-[#8A8A8A] uppercase tracking-wide mb-2">
+            Versión bíblica
+          </label>
+          <div className="grid grid-cols-2 gap-2">
+            {VERSIONES.map((v) => (
+              <button
+                key={v.valor}
+                type="button"
+                onClick={() => setVersion(v.valor)}
+                disabled={adoptando}
+                className={`border rounded-lg px-3 py-2.5 text-left transition-colors disabled:opacity-50 ${
+                  version === v.valor
+                    ? "border-[#4A6FA5] bg-[#4A6FA5]/5"
+                    : "border-[#E8E4DF] hover:border-[#4A6FA5]/40 bg-[#FAF8F5]"
+                }`}
+              >
+                <p className={`font-inter text-sm font-medium ${version === v.valor ? "text-[#4A6FA5]" : "text-[#2C2C2C]"}`}>
+                  {v.label}
+                </p>
+                <p className="font-inter text-xs text-[#8A8A8A] mt-0.5">{v.desc}</p>
+              </button>
+            ))}
+          </div>
+        </div>
+
+        {error && <p className="font-inter text-xs text-red-500">{error}</p>}
+
+        <div className="flex gap-3 pt-1">
+          <button
+            onClick={onClose}
+            disabled={adoptando}
+            className="flex-1 border border-[#E8E4DF] font-inter text-sm text-[#8A8A8A] py-3 rounded-lg hover:bg-[#FAF8F5] transition-colors disabled:opacity-40"
+          >
+            Cancelar
+          </button>
+          <button
+            onClick={handleAdoptar}
+            disabled={adoptando || !nombrePlan.trim()}
+            className="flex-1 bg-[#4A6FA5] text-white font-inter text-sm font-medium py-3 rounded-lg hover:bg-[#3d5f8f] transition-colors disabled:opacity-40 flex items-center justify-center gap-2"
+          >
+            {adoptando ? (
+              <>
+                <span className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                Creando...
+              </>
+            ) : "Crear mi plan"}
+          </button>
+        </div>
+      </div>
+    </div>
   );
 }
 

@@ -129,7 +129,7 @@ export async function POST(request: NextRequest) {
   // 6. Crear el plan
   const { data: plan, error: planError } = await supabase
     .from("bible_planes")
-    .insert({ id_usuario: user.id, nombre: nombre_plan.trim(), descripcion: template?.descripcion ?? null, activo: true })
+    .insert({ id_usuario: user.id, nombre: nombre_plan.trim(), descripcion: template?.descripcion ?? null, version: version_biblica, activo: true })
     .select("id")
     .single();
 
@@ -172,7 +172,9 @@ export async function POST(request: NextRequest) {
         fecha_programada,
       };
     })
-    .filter(Boolean) as {
+    .filter(Boolean);
+
+  const sesionesInsertTyped = sesionesInsert as {
       id_plan: number;
       orden: number;
       versiculo_inicio_id: number;
@@ -182,12 +184,12 @@ export async function POST(request: NextRequest) {
     }[];
 
   const BATCH = 500;
-  for (let i = 0; i < sesionesInsert.length; i += BATCH) {
+  for (let i = 0; i < sesionesInsertTyped.length; i += BATCH) {
     const { error: sError } = await supabase
       .from("bible_sesiones")
-      .insert(sesionesInsert.slice(i, i + BATCH));
+      .insert(sesionesInsertTyped.slice(i, i + BATCH));
     if (sError) return NextResponse.json({ error: "Error al insertar sesiones" }, { status: 500 });
   }
 
-  return NextResponse.json({ id_plan: plan.id, sesiones_creadas: sesionesInsert.length });
+  return NextResponse.json({ id_plan: plan.id, sesiones_creadas: sesionesInsertTyped.length });
 }
