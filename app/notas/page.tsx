@@ -13,6 +13,7 @@ interface NotaDetalle {
   texto: string;
   color: string;
   updated_at: string;
+  versiculos_texto: string[];
   libro: {
     nombre: string;
     testamento: string;
@@ -56,7 +57,10 @@ function exportarNotas(notas: NotaDetalle[]) {
           ? `${n.capitulo}:${n.versiculo_inicio}–${n.versiculo_fin}`
           : `${n.capitulo}:${n.versiculo_inicio}`;
         lineas.push(`  ${n.abreviatura_libro} ${rango}`);
-        lineas.push(`  ${n.texto}`);
+        if (n.versiculos_texto?.length) {
+          lineas.push(`  «${n.versiculos_texto.join(" ")}»`);
+        }
+        lineas.push(`  Nota: ${n.texto}`);
         lineas.push("");
       }
     }
@@ -111,10 +115,14 @@ function exportarPDF(notas: NotaDetalle[]) {
             const bg = coloresBg[n.color] ?? "#FEF9C3";
             const border = coloresBorder[n.color] ?? "#FDE047";
             const fg = coloresFg[n.color] ?? "#854D0E";
+            const textoVerso = n.versiculos_texto?.length
+              ? `<p class="versiculo">${n.versiculos_texto.join(" ")}</p>`
+              : "";
             return `
               <div class="nota" style="background:${bg};border-left-color:${border}">
                 <p class="ref" style="color:${fg}">${n.abreviatura_libro} ${rango}</p>
-                <p class="texto">${n.texto.replace(/\n/g, "<br>")}</p>
+                ${textoVerso}
+                <p class="nota-texto">${n.texto.replace(/\n/g, "<br>")}</p>
               </div>`;
           }).join("")}
         </div>`).join("")}`;
@@ -136,8 +144,9 @@ function exportarPDF(notas: NotaDetalle[]) {
     .libro { margin-bottom: 24px; }
     .libro h3 { font-family: 'Lora', serif; font-size: 16px; margin-bottom: 10px; }
     .nota { border-left: 4px solid; border-radius: 8px; padding: 10px 14px; margin-bottom: 8px; page-break-inside: avoid; }
-    .ref { font-size: 11px; font-weight: 500; margin-bottom: 4px; }
-    .texto { font-family: 'Lora', serif; font-size: 13px; line-height: 1.7; }
+    .ref { font-size: 11px; font-weight: 500; margin-bottom: 6px; }
+    .versiculo { font-family: 'Lora', serif; font-size: 13px; line-height: 1.7; color: #2C2C2C; margin-bottom: 8px; font-style: italic; }
+    .nota-texto { font-family: 'Inter', sans-serif; font-size: 12px; line-height: 1.65; color: #3C3C3C; border-top: 1px solid rgba(0,0,0,0.08); padding-top: 7px; margin-top: 2px; }
     @media print { body { padding: 20px; } }
   </style>
 </head>
